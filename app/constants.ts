@@ -71,7 +71,7 @@ export const TAB_TITLES: Record<string, string> = {
 };
 
 export const TAB_SUBS: Record<string, string> = {
-  dashboard: '루씨브이에이전시 · 오늘 현황',
+  dashboard: '루씨 · 오늘 현황',
   influencer: '인플루언서 공동구매 관리',
   projects: '이너피움 · 아쿠아크 · 문화콘텐츠',
   calendar: '일정 및 스케줄 관리',

@@ -64,15 +64,24 @@ export default function Home() {
     localStorage.setItem('lv_team', JSON.stringify(members));
   }, [members, mounted]);
 
+  // Handle Google OAuth redirect: switch to calendar tab
+  useEffect(() => {
+    if (!mounted) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('gcal') === 'connected' || params.has('error')) {
+      setActiveTab('calendar');
+    }
+  }, [mounted]);
+
   if (!mounted) {
     return (
       <div className="app-layout" style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 28, fontWeight: 600, letterSpacing: 3, color: 'var(--rose2)', marginBottom: 8 }}>
-            LUCY V
+            루씨
           </div>
           <div style={{ fontSize: 10, letterSpacing: 4, color: 'var(--text3)', fontFamily: "'DM Mono', monospace", textTransform: 'uppercase' }}>
-            Agency OS
+            업무관리
           </div>
         </div>
       </div>

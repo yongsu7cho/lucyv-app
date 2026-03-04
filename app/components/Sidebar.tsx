@@ -19,8 +19,8 @@ export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount 
   return (
     <div className="sidebar">
       <div className="brand">
-        <div className="brand-logo">LUCY V</div>
-        <div className="brand-sub">Agency OS</div>
+        <div className="brand-logo">루씨</div>
+        <div className="brand-sub">업무관리</div>
       </div>
       <nav>
         {NAV_ITEMS.map((item) => (
