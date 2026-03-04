@@ -305,8 +305,31 @@ function GoogleCalendarTab() {
     setCalM(m); setCalY(y);
   }
 
-  async function handleConnect() {
-    window.location.href = '/api/auth/google';
+  function handleConnect() {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setAuthError(
+        'NEXT_PUBLIC_GOOGLE_CLIENT_ID 환경변수가 설정되지 않았습니다. ' +
+        '.env.local 파일을 확인해주세요.'
+      );
+      return;
+    }
+
+    const redirectUri = `${window.location.origin}/api/auth/callback/google`;
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: [
+        'https://www.googleapis.com/auth/calendar.readonly',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ].join(' '),
+      access_type: 'offline',
+      prompt: 'consent',
+    });
+
+    window.location.href =
+      `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
   }
 
   async function handleDisconnect() {
@@ -478,10 +501,8 @@ function GoogleCalendarTab() {
 // CONNECT UI
 // ────────────────────────────────────────────
 function GoogleConnectUI({ onConnect, error }: { onConnect: () => void; error: string | null }) {
-  const missingEnv =
-    typeof window !== 'undefined' &&
-    window.location.hostname !== 'localhost' &&
-    false; // env check happens server-side
+  // NEXT_PUBLIC_ vars are inlined at build time — undefined means not configured
+  const credentialsReady = !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -500,46 +521,89 @@ function GoogleConnectUI({ onConnect, error }: { onConnect: () => void; error: s
           읽기 전용으로 연동되며 데이터는 안전하게 처리됩니다.
         </div>
 
-        <div className="gcal-steps">
-          <div className="gcal-step">
-            <div className="gcal-step-num">1</div>
-            <div>아래 버튼을 클릭해 구글 계정으로 로그인하세요</div>
-          </div>
-          <div className="gcal-step">
-            <div className="gcal-step-num">2</div>
-            <div>캘린더 접근 권한을 허용하세요 <span style={{ color: 'var(--text3)' }}>(읽기 전용)</span></div>
-          </div>
-          <div className="gcal-step">
-            <div className="gcal-step-num">3</div>
-            <div>연동 완료 후 구글 캘린더의 일정이 자동으로 표시됩니다</div>
-          </div>
-        </div>
+        {credentialsReady ? (
+          /* ── Credentials configured: show real OAuth button ── */
+          <>
+            <div className="gcal-steps">
+              <div className="gcal-step">
+                <div className="gcal-step-num">1</div>
+                <div>아래 버튼을 클릭해 구글 계정으로 로그인하세요</div>
+              </div>
+              <div className="gcal-step">
+                <div className="gcal-step-num">2</div>
+                <div>캘린더 접근 권한을 허용하세요 <span style={{ color: 'var(--text3)' }}>(읽기 전용)</span></div>
+              </div>
+              <div className="gcal-step">
+                <div className="gcal-step-num">3</div>
+                <div>연동 완료 후 구글 캘린더의 일정이 자동으로 표시됩니다</div>
+              </div>
+            </div>
 
-        <button
-          className="btn btn-google"
-          onClick={onConnect}
-          style={{ width: '100%', justifyContent: 'center', padding: '11px 16px', fontSize: 13, gap: 10 }}
-        >
-          <GoogleIcon />
-          Google 계정으로 연동하기
-        </button>
+            <button
+              className="btn btn-google"
+              onClick={onConnect}
+              style={{ width: '100%', justifyContent: 'center', padding: '11px 16px', fontSize: 13, gap: 10 }}
+            >
+              <GoogleIcon />
+              Google 계정으로 연동하기
+            </button>
+          </>
+        ) : (
+          /* ── Credentials missing: setup guide ── */
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ padding: '12px 16px', background: 'rgba(232,112,112,0.06)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 10, marginBottom: 16, fontSize: 12, color: 'var(--danger)' }}>
+              ⚠ 환경변수가 설정되지 않았습니다. 아래 단계를 따라 설정해주세요.
+            </div>
 
-        <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--rose-glow)', border: '1px solid var(--rose-dim)', borderRadius: 8, fontSize: 11, color: 'var(--text3)', lineHeight: 1.6 }}>
-          💡 <strong style={{ color: 'var(--text2)' }}>환경변수 설정 필요</strong>
-          <br />
-          <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 10 }}>GOOGLE_CLIENT_ID</code> 및{' '}
-          <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 10 }}>GOOGLE_CLIENT_SECRET</code>을
-          <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 10 }}>.env.local</code> 또는 Vercel 환경변수에 설정해야 합니다.
-          <br />
-          <a
-            href="https://console.cloud.google.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: 'var(--rose2)', textDecoration: 'none', fontFamily: "'DM Mono', monospace", fontSize: 10 }}
-          >
-            → Google Cloud Console에서 발급하기
-          </a>
-        </div>
+            <div className="gcal-steps">
+              <div className="gcal-step">
+                <div className="gcal-step-num">1</div>
+                <div>
+                  <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer"
+                    style={{ color: 'var(--rose2)' }}>Google Cloud Console</a>에서
+                  프로젝트 생성 후 <strong>Google Calendar API</strong> 활성화
+                </div>
+              </div>
+              <div className="gcal-step">
+                <div className="gcal-step-num">2</div>
+                <div>
+                  &ldquo;사용자 인증 정보&rdquo; → &ldquo;OAuth 2.0 클라이언트 ID&rdquo; 생성<br />
+                  리디렉션 URI:&nbsp;
+                  <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 10, color: 'var(--rose2)' }}>
+                    {typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'}
+                    /api/auth/callback/google
+                  </code>
+                </div>
+              </div>
+              <div className="gcal-step">
+                <div className="gcal-step-num">3</div>
+                <div>
+                  프로젝트 루트에 <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 10 }}>.env.local</code> 파일 생성:
+                  <pre style={{ marginTop: 8, padding: '8px 12px', background: 'var(--surface3)', borderRadius: 6, fontSize: 10, fontFamily: "'DM Mono', monospace", color: 'var(--text2)', overflowX: 'auto', lineHeight: 1.8 }}>
+{`NEXT_PUBLIC_GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=xxx`}
+                  </pre>
+                </div>
+              </div>
+              <div className="gcal-step">
+                <div className="gcal-step-num">4</div>
+                <div>
+                  <code style={{ fontFamily: "'DM Mono', monospace", fontSize: 10 }}>npm run dev</code> 재시작 후 이 페이지를 새로 고침하세요
+                </div>
+              </div>
+            </div>
+
+            <button
+              className="btn btn-ghost"
+              onClick={onConnect}
+              style={{ width: '100%', justifyContent: 'center', padding: '10px 16px', fontSize: 12, marginTop: 8, opacity: 0.5, cursor: 'not-allowed' }}
+              disabled
+            >
+              <GoogleIcon />
+              Google 계정으로 연동하기 (환경변수 설정 필요)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

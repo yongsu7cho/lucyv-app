@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export function GET(request: NextRequest) {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
   if (!clientId) {
     return NextResponse.json(
-      { error: 'GOOGLE_CLIENT_ID 환경변수가 설정되지 않았습니다.' },
+      { error: 'NEXT_PUBLIC_GOOGLE_CLIENT_ID 환경변수가 설정되지 않았습니다.' },
       { status: 500 }
     );
   }

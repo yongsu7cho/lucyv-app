@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/?error=auth_failed`);
   }
 
-  const clientId = process.env.GOOGLE_CLIENT_ID;
+  // NEXT_PUBLIC_GOOGLE_CLIENT_ID is the same value, accessible both client & server
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
