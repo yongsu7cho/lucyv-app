@@ -666,13 +666,15 @@ function GcalConnectedView({
                     key={ev.id}
                     className={`gcday-ev${isAllDay ? ' allday' : ''}`}
                     style={{
-                      background: isAllDay ? color : `${color}18`,
+                      background: isAllDay ? color : `${color}28`,
                       color: isAllDay ? '#fff' : color,
-                      borderLeft: isAllDay ? 'none' : `2px solid ${color}`,
+                      borderLeft: isAllDay ? `3px solid ${color}` : `3px solid ${color}`,
+                      fontWeight: isAllDay ? 700 : 500,
                     }}
                     title={ev.summary ?? '(제목 없음)'}
+                    onClick={e => e.stopPropagation()}
                   >
-                    {isAllDay ? '' : `${eventTime(ev)} `}{ev.summary ?? '(제목 없음)'}
+                    {ev.summary ?? '(제목 없음)'}
                   </div>
                 );
               })}

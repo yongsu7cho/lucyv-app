@@ -606,13 +606,15 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   background: var(--surface2);
 }
 .gcday {
-  min-height: 96px;
-  padding: 6px 5px 4px;
+  min-height: 110px;
+  padding: 5px 4px 4px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  cursor: pointer;
+  cursor: default;
   transition: background 0.1s;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .gcday:nth-child(7n) { border-right: none; }
 .gcday:hover { background: var(--surface2); }
@@ -622,14 +624,14 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   font-weight: 600;
   font-family: 'DM Mono', monospace;
   color: var(--text2);
-  line-height: 20px;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  margin-bottom: 3px;
+  flex-shrink: 0;
+  margin-bottom: 1px;
 }
 .gcday.today .gcday-num {
   background: var(--rose);
@@ -637,27 +639,31 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 }
 .gcday.om .gcday-num { color: var(--text3); }
 .gcday-ev {
-  font-size: 10px;
-  line-height: 1.3;
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.4;
+  min-height: 16px;
   padding: 1px 5px 2px;
   border-radius: 3px;
-  margin-bottom: 2px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   cursor: pointer;
   font-family: 'DM Mono', monospace;
   letter-spacing: 0;
+  flex-shrink: 0;
 }
+.gcday-ev:hover { opacity: 0.85; }
 .gcday-ev.allday {
-  font-weight: 600;
+  font-weight: 700;
 }
 .gcday-more {
-  font-size: 9px;
+  font-size: 9.5px;
   color: var(--text3);
-  padding: 0 3px;
+  padding: 0 4px;
   font-family: 'DM Mono', monospace;
   cursor: pointer;
+  flex-shrink: 0;
 }
 .gcday-more:hover { color: var(--rose2); }
 
