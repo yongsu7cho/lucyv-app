@@ -13,6 +13,7 @@ const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; 
   { tab: 'projects', icon: '◉', label: '프로젝트/캠페인', section: 'Brand' },
   { tab: 'calendar', icon: '◷', label: '일정/캘린더' },
   { tab: 'team', icon: '◎', label: '팀원 관리', section: 'Team' },
+  { tab: 'memo', icon: '✎', label: '메모장', section: 'Note' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount }: SidebarProps) {

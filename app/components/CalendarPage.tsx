@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MONTHS_EN, CAT_COL, dk } from '../constants';
 import type { CalendarEventMap, CalendarEvent, EventCategory } from '../types';
 
@@ -30,10 +30,13 @@ const GCOLOR: Record<string, string> = {
   '9': '#3F51B5', '10': '#0B8043', '11': '#D50000',
 };
 
+// Always return a real hex color (never a CSS variable string)
+const DEFAULT_EVENT_COLOR = '#e8a0a8';
+
 function eventColor(ev: GCalEvent): string {
-  if (ev.colorId) return GCOLOR[ev.colorId] ?? 'var(--rose)';
+  if (ev.colorId) return GCOLOR[ev.colorId] ?? DEFAULT_EVENT_COLOR;
   if (ev.calendarColor) return ev.calendarColor;
-  return 'var(--rose)';
+  return DEFAULT_EVENT_COLOR;
 }
 
 function eventDate(ev: GCalEvent): string {
@@ -44,6 +47,24 @@ function eventTime(ev: GCalEvent): string {
   if (!ev.start.dateTime) return '하루 종일';
   const d = new Date(ev.start.dateTime);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// Korean AM/PM format: "AM 11시", "PM 2시 30분"
+function eventTimeKo(ev: GCalEvent): string {
+  if (!ev.start.dateTime) return '';
+  const d = new Date(ev.start.dateTime);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h < 12 ? 'AM' : 'PM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return m === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}시 ${m}분`;
+}
+
+// Show "N월 1일" for first day of month, otherwise just number
+function dateLabelKo(key: string, day: number): string {
+  if (!key || day !== 1) return String(day);
+  const m = parseInt(key.split('-')[1] ?? '1');
+  return `${m}월 1일`;
 }
 
 function groupByDate(items: GCalEvent[]): GCalMap {
@@ -170,11 +191,27 @@ function CompanyCalendar({
           {days.map((d, idx) => {
             const isToday = d.key === todayKey;
             const isSel = d.key === selDay && !isToday;
-            const hasEv = !!d.key && (events[d.key] ?? []).length > 0;
-            const cls = ['cday', d.outside ? 'om' : '', isToday ? 'today' : '', isSel ? 'sel' : '', hasEv ? 'hev' : ''].filter(Boolean).join(' ');
+            const dayEvs = d.key
+              ? (events[d.key] ?? []).slice().sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
+              : [];
+            const MAX = 4;
+            const shown = dayEvs.slice(0, MAX);
+            const overflow = dayEvs.length - MAX;
+            const cls = ['cday', d.outside ? 'om' : '', isToday ? 'today' : '', isSel ? 'sel' : ''].filter(Boolean).join(' ');
             return (
               <div key={idx} className={cls} onClick={() => { if (!d.outside && d.key) setSelDay(d.key); }}>
-                {d.day}
+                <div className="cday-num">{d.day}</div>
+                {shown.map(ev => (
+                  <div
+                    key={ev.id}
+                    className="cday-ev"
+                    style={{ borderLeftColor: CAT_COL[ev.cat] ?? 'var(--rose)', color: CAT_COL[ev.cat] ?? 'var(--rose)' }}
+                    title={`${ev.time ? ev.time + ' · ' : ''}${ev.title}`}
+                  >
+                    {ev.title}
+                  </div>
+                ))}
+                {overflow > 0 && <div className="cday-more">+{overflow}개</div>}
               </div>
             );
           })}
@@ -267,9 +304,20 @@ function GoogleCalendarTab() {
         setAuthError('인증이 만료되었어요. 다시 연동해주세요.');
         return;
       }
-      if (!res.ok) throw new Error('fetch failed');
 
       const data = await res.json();
+
+      if (!res.ok) {
+        // Calendar API 오류 (403 = API 미활성화, 기타)
+        const apiMsg = data?.message ?? '';
+        if (apiMsg.toLowerCase().includes('calendar api has not been used') || apiMsg.toLowerCase().includes('disabled')) {
+          setEventsError('Google Calendar API가 활성화되어 있지 않아요. Google Cloud Console에서 Calendar API를 활성화해주세요.');
+        } else {
+          setEventsError(`일정을 불러오지 못했어요. (${apiMsg || res.status})`);
+        }
+        return;
+      }
+
       setGcalMap(groupByDate((data.items ?? []) as GCalEvent[]));
     } catch {
       setEventsError('일정을 불러오는 데 실패했어요. 잠시 후 다시 시도해주세요.');
@@ -286,7 +334,18 @@ function GoogleCalendarTab() {
 
     if (gcal || err) {
       window.history.replaceState({}, '', '/');
-      if (err) setAuthError('구글 로그인에 실패했어요. 다시 시도해주세요.');
+      if (err) {
+        const errMessages: Record<string, string> = {
+          auth_failed: '구글 로그인이 취소되었거나 실패했어요. 다시 시도해주세요.',
+          missing_credentials:
+            'GOOGLE_CLIENT_SECRET 환경변수가 설정되지 않았습니다. .env.local 파일을 확인해주세요.',
+          token_exchange_failed:
+            '구글 서버와 통신에 실패했어요. 네트워크를 확인 후 다시 시도해주세요.',
+          no_access_token:
+            '구글 인증은 성공했지만 토큰을 받지 못했어요. Client ID/Secret이 올바른지 확인해주세요.',
+        };
+        setAuthError(errMessages[err] ?? `구글 로그인에 실패했어요. (오류 코드: ${err})`);
+      }
     }
 
     checkStatus();
@@ -370,11 +429,6 @@ function GoogleCalendarTab() {
   const rem = (first + dim) % 7;
   if (rem > 0) for (let i = 1; i <= 7 - rem; i++) days.push({ key: '', day: i, outside: true });
 
-  const selEvs = (gcalMap[selDay] ?? []).slice().sort((a, b) =>
-    (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? '')
-  );
-  const [selY, selMon, selD] = selDay.split('-');
-
   // Collect unique calendar sources for legend
   const calSources = Array.from(
     new Map(
@@ -383,117 +437,16 @@ function GoogleCalendarTab() {
   ).slice(0, 6);
 
   return (
-    <div>
-      {/* Status bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
-            구글 캘린더 연동됨
-          </span>
-          {authStatus.email && (
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
-              · {authStatus.email}
-            </span>
-          )}
-          {eventsLoading && (
-            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
-              · 동기화 중...
-            </span>
-          )}
-        </div>
-        <button className="btn btn-danger btn-sm" onClick={handleDisconnect}>연동 해제</button>
-      </div>
-
-      {/* Calendar legend */}
-      {calSources.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-          {calSources.map(([name, color]) => (
-            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: 8, height: 8, borderRadius: 2, background: color ?? 'var(--rose)', flexShrink: 0 }} />
-              <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>{name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {eventsError && (
-        <div style={{ marginBottom: 14, padding: '8px 14px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--danger)' }}>
-          {eventsError}
-        </div>
-      )}
-
-      {/* Calendar grid + event panel */}
-      <div className="cal-wrap">
-        <div>
-          <div className="cal-head">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="cal-nav-btn" onClick={() => changeMonth(-1)}>‹</button>
-              <div className="cal-mo">{MONTHS_EN[calM]} {calY}</div>
-              <button className="cal-nav-btn" onClick={() => changeMonth(1)}>›</button>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setCalY(now.getFullYear()); setCalM(now.getMonth()); setSelDay(dk(now)); }}>
-              오늘
-            </button>
-          </div>
-          <div className="cal-dnames">
-            {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
-              <div key={d} className="cal-dname" style={{ color: i === 0 ? 'var(--rose)' : i === 6 ? 'var(--lavender)' : undefined }}>{d}</div>
-            ))}
-          </div>
-          <div className="cal-days-grid">
-            {days.map((d, idx) => {
-              const isToday = d.key === todayKey;
-              const isSel = d.key === selDay && !isToday;
-              const evCount = d.key ? (gcalMap[d.key] ?? []).length : 0;
-              const cls = ['cday', d.outside ? 'om' : '', isToday ? 'today' : '', isSel ? 'sel' : '', evCount > 0 ? 'hev' : ''].filter(Boolean).join(' ');
-              return (
-                <div
-                  key={idx}
-                  className={cls}
-                  onClick={() => { if (!d.outside && d.key) setSelDay(d.key); }}
-                  title={evCount > 0 ? `${evCount}개 일정` : undefined}
-                >
-                  {d.day}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Event panel for selected day */}
-        <div className="ev-panel">
-          <div className="ev-date-lbl">{parseInt(selY)}년 {parseInt(selMon)}월 {parseInt(selD)}일</div>
-          {selEvs.length === 0 ? (
-            <div className="empty" style={{ padding: '24px 0' }}>
-              <div className="empty-icon" style={{ fontSize: 24 }}>📅</div>
-              <p style={{ fontSize: 12 }}>구글 일정이 없어요</p>
-            </div>
-          ) : (
-            selEvs.map(ev => {
-              const color = eventColor(ev);
-              return (
-                <div key={ev.id} className="ev-item" style={{ borderLeftColor: color }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="ev-time" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{eventTime(ev)}</span>
-                      {ev.calendarSummary && !ev.isPrimary && (
-                        <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: `${color}22`, color, fontFamily: "'DM Mono', monospace" }}>
-                          {ev.calendarSummary}
-                        </span>
-                      )}
-                    </div>
-                    <div className="ev-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {ev.summary ?? '(제목 없음)'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
+    <GcalConnectedView
+      calY={calY} calM={calM} days={days} gcalMap={gcalMap}
+      todayKey={todayKey} calSources={calSources}
+      eventsLoading={eventsLoading} eventsError={eventsError}
+      email={authStatus.email}
+      onPrev={() => changeMonth(-1)}
+      onNext={() => changeMonth(1)}
+      onToday={() => { setCalY(now.getFullYear()); setCalM(now.getMonth()); }}
+      onDisconnect={handleDisconnect}
+    />
   );
 }
 
@@ -507,9 +460,18 @@ function GoogleConnectUI({ onConnect, error }: { onConnect: () => void; error: s
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {error && (
-        <div style={{ padding: '10px 16px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 10, fontSize: 12, color: 'var(--danger)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <span>⚠</span>
-          <span>{error}</span>
+        <div style={{ padding: '10px 16px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 10, fontSize: 12, color: 'var(--danger)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span>⚠</span>
+            <span>{error}</span>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', paddingLeft: 20 }}>
+            Google Cloud Console → OAuth 2.0 → 승인된 리디렉션 URI에&nbsp;
+            <code style={{ fontFamily: "'DM Mono', monospace" }}>
+              {typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/callback/google
+            </code>
+            &nbsp;이 등록되어 있는지 확인하세요.
+          </div>
         </div>
       )}
 
@@ -604,6 +566,141 @@ GOOGLE_CLIENT_SECRET=xxx`}
             </button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// GCAL CONNECTED: full-grid view
+// ────────────────────────────────────────────
+interface GcalConnectedViewProps {
+  calY: number; calM: number;
+  days: { key: string; day: number; outside: boolean }[];
+  gcalMap: GCalMap;
+  todayKey: string;
+  calSources: [string | undefined, string | undefined][];
+  eventsLoading: boolean;
+  eventsError: string | null;
+  email: string | null;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  onDisconnect: () => void;
+}
+
+function GcalConnectedView({
+  calY, calM, days, gcalMap, todayKey, calSources,
+  eventsLoading, eventsError, email,
+  onPrev, onNext, onToday, onDisconnect,
+}: GcalConnectedViewProps) {
+  return (
+    <div className="gcal-white">
+      {/* Status bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+            구글 캘린더 연동됨
+          </span>
+          {email && (
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>· {email}</span>
+          )}
+          {eventsLoading && (
+            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>· 동기화 중...</span>
+          )}
+        </div>
+        <button className="btn btn-danger btn-sm" onClick={onDisconnect}>연동 해제</button>
+      </div>
+
+      {/* Legend */}
+      {calSources.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+          {calSources.map(([name, color]) => (
+            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: color ?? DEFAULT_EVENT_COLOR, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: 'var(--text2)' }}>{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {eventsError && (
+        <div style={{ marginBottom: 12, padding: '8px 14px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--danger)' }}>
+          {eventsError}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="cal-nav-btn" onClick={onPrev}>‹</button>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: '#111' }}>
+            {calY}년 {calM + 1}월
+          </div>
+          <button className="cal-nav-btn" onClick={onNext}>›</button>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={onToday}>오늘</button>
+      </div>
+
+      {/* White calendar grid */}
+      <div className="gcal-white-grid">
+        {/* Korean day headers */}
+        {['일','월','화','수','목','금','토'].map((d, i) => (
+          <div key={d} className="gcal-white-dname" style={{
+            color: i === 0 ? '#d32f2f' : i === 6 ? '#1565c0' : '#555',
+          }}>
+            {d}
+          </div>
+        ))}
+
+        {/* Day cells */}
+        {days.map((d, idx) => {
+          const isToday = d.key === todayKey;
+          const dayEvs = d.key ? (gcalMap[d.key] ?? []).slice().sort((a, b) =>
+            (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? '')
+          ) : [];
+          const MAX_SHOWN = 4;
+          const shown = dayEvs.slice(0, MAX_SHOWN);
+          const overflow = dayEvs.length - MAX_SHOWN;
+
+          return (
+            <div
+              key={idx}
+              className={['gcal-white-day', d.outside ? 'om' : ''].filter(Boolean).join(' ')}
+            >
+              {/* Date number */}
+              <div className={['gcal-white-num', isToday ? 'today' : ''].filter(Boolean).join(' ')}>
+                {dateLabelKo(d.key, d.day)}
+              </div>
+
+              {/* Events */}
+              {shown.map(ev => {
+                const color = eventColor(ev);
+                const timeStr = eventTimeKo(ev);
+                return (
+                  <div key={ev.id} className="gcal-white-ev" title={`${timeStr} ${ev.summary ?? ''}`}>
+                    <span style={{
+                      display: 'inline-block',
+                      width: 7, height: 7,
+                      borderRadius: '50%',
+                      background: color,
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }} />
+                    <span className="gcal-white-ev-text">
+                      {timeStr && <span style={{ color: '#555', marginRight: 2 }}>{timeStr}</span>}
+                      {ev.summary ?? '(제목 없음)'}
+                    </span>
+                  </div>
+                );
+              })}
+              {overflow > 0 && (
+                <div className="gcal-white-more">+{overflow}개 더보기</div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
