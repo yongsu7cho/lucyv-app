@@ -6,6 +6,12 @@ export type ProjectStatus = 'active' | 'hold' | 'done';
 export type TeamStatus = 'a' | 'l' | 'w';
 export type EventCategory = '공구' | '캠페인' | '전시' | '미팅' | '기타';
 
+export interface ActionItem {
+  id: number;
+  text: string;
+  done: boolean;
+}
+
 export interface Influencer {
   id: number;
   name: string;
@@ -18,6 +24,8 @@ export interface Influencer {
   end: string;
   status: InfluencerStatus;
   color: string;
+  notes: string;
+  actions: ActionItem[];
 }
 
 export interface Project {
@@ -29,6 +37,8 @@ export interface Project {
   due: string;
   progress: number;
   status: ProjectStatus;
+  notes: string;
+  actions: ActionItem[];
 }
 
 export interface CalendarEvent {
@@ -54,8 +64,8 @@ export interface Memo {
   id: number;
   title: string;
   content: string;
-  color: string; // accent color hex
-  updatedAt: string; // ISO string
+  color: string;
+  updatedAt: string;
 }
 
 export interface TeamMember {
@@ -67,4 +77,7 @@ export interface TeamMember {
   tags: string[];
   status: TeamStatus;
   color: string;
+  notes: string;
+  actions: ActionItem[];
 }
+

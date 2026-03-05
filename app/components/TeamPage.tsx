@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { AVCOL, TEAM_STAT } from '../constants';
 import type { TeamMember, TeamStatus } from '../types';
+import DetailPanel from './DetailPanel';
 
 interface TeamPageProps {
   members: TeamMember[];
@@ -15,7 +16,8 @@ const EMPTY_FORM = {
 export default function TeamPage({ members, setMembers }: TeamPageProps) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedMember = selectedId != null ? members.find(m => m.id === selectedId) ?? null : null;
 
   function handleAdd() {
     if (!form.name.trim()) return;
@@ -28,6 +30,7 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
       tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
       status: form.status,
       color: AVCOL[members.length % AVCOL.length],
+      notes: '', actions: [],
     };
     setMembers([...members, newMem]);
     setForm(EMPTY_FORM);
@@ -38,9 +41,16 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
     setMembers(members.map(m => m.id === id ? { ...m, status } : m));
   }
 
-  function handleDelete(id: number) {
+  function handleDelete(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
     if (!confirm('삭제할까요?')) return;
     setMembers(members.filter(m => m.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  }
+
+  function handlePanelSave(updated: TeamMember) {
+    setMembers(members.map(m => m.id === updated.id ? updated : m));
+    setSelectedId(null);
   }
 
   const activeCount = members.filter(m => m.status === 'a').length;
@@ -70,8 +80,8 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
           {members.slice().sort((a, b) => { const o: Record<string, number> = { a: 0, w: 1, l: 2 }; return (o[a.status] ?? 9) - (o[b.status] ?? 9); }).map(m => {
             const ms = TEAM_STAT[m.status];
             return (
-              <div key={m.id} className="mem-card sli">
-                <button className="xbtn" onClick={() => handleDelete(m.id)}>✕</button>
+              <div key={m.id} className="mem-card sli" onClick={() => setSelectedId(m.id)} style={{ cursor: 'pointer' }}>
+                <button className="xbtn" onClick={e => handleDelete(m.id, e)}>✕</button>
                 <div className="mem-av" style={{ background: m.color }}>
                   {m.name.charAt(0)}
                 </div>
@@ -97,6 +107,7 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
                     className="input"
                     style={{ width: 'auto', padding: '3px 8px', fontSize: 10, marginTop: 0 }}
                     value={m.status}
+                    onClick={e => e.stopPropagation()}
                     onChange={e => handleStatusChange(m.id, e.target.value as TeamStatus)}
                   >
                     <option value="a">재직 중</option>
@@ -108,6 +119,16 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
             );
           })}
         </div>
+      )}
+
+      {/* Detail Panel */}
+      {selectedMember && (
+        <DetailPanel
+          type="team"
+          item={selectedMember}
+          onSave={item => handlePanelSave(item as TeamMember)}
+          onClose={() => setSelectedId(null)}
+        />
       )}
 
       {/* Modal */}

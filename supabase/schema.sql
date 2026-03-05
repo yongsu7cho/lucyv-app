@@ -23,6 +23,10 @@ alter table influencers enable row level security;
 drop policy if exists "Allow all" on influencers;
 create policy "Allow all" on influencers for all using (true) with check (true);
 
+-- Detail panel fields (run as migration if table already exists)
+alter table influencers add column if not exists notes text not null default '';
+alter table influencers add column if not exists actions jsonb not null default '[]';
+
 -- ── 프로젝트/캠페인 ──
 create table if not exists projects (
   id bigint primary key,
@@ -39,6 +43,9 @@ create table if not exists projects (
 alter table projects enable row level security;
 drop policy if exists "Allow all" on projects;
 create policy "Allow all" on projects for all using (true) with check (true);
+
+alter table projects add column if not exists notes text not null default '';
+alter table projects add column if not exists actions jsonb not null default '[]';
 
 -- ── 회사 일정 (캘린더) ──
 create table if not exists calendar_events (
@@ -86,6 +93,9 @@ create table if not exists team_members (
 alter table team_members enable row level security;
 drop policy if exists "Allow all" on team_members;
 create policy "Allow all" on team_members for all using (true) with check (true);
+
+alter table team_members add column if not exists notes text not null default '';
+alter table team_members add column if not exists actions jsonb not null default '[]';
 
 -- ── 메모장 ──
 create table if not exists memos (

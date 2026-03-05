@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { BRAND_STYLE, PROJ_COLOR, PROJ_STAT } from '../constants';
 import type { Project } from '../types';
+import DetailPanel from './DetailPanel';
 
 interface ProjectsPageProps {
   projects: Project[];
@@ -17,6 +18,8 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState<'all' | 'active' | 'hold' | 'done'>('all');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedProj = selectedId != null ? projects.find(p => p.id === selectedId) ?? null : null;
 
   const PROJ_ORDER: Record<string, number> = { active: 0, hold: 1, done: 2 };
   const filtered = (filter === 'all' ? projects : projects.filter(p => p.status === filter))
@@ -33,15 +36,23 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
       due: form.due,
       progress: Math.min(100, Math.max(0, form.progress)),
       status: form.status,
+      notes: '', actions: [],
     };
     setProjects([...projects, newProj]);
     setForm(EMPTY_FORM);
     setOpen(false);
   }
 
-  function handleDelete(id: number) {
+  function handleDelete(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
     if (!confirm('삭제할까요?')) return;
     setProjects(projects.filter(p => p.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  }
+
+  function handlePanelSave(updated: Project) {
+    setProjects(projects.map(p => p.id === updated.id ? updated : p));
+    setSelectedId(null);
   }
 
   return (
@@ -97,8 +108,8 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
             const bs = BRAND_STYLE[p.brand] || BRAND_STYLE['기타'];
             const ps = PROJ_STAT[p.status];
             return (
-              <div key={p.id} className="proj-card sli">
-                <button className="xbtn" onClick={() => handleDelete(p.id)}>✕</button>
+              <div key={p.id} className="proj-card sli" onClick={() => setSelectedId(p.id)} style={{ cursor: 'pointer' }}>
+                <button className="xbtn" onClick={e => handleDelete(p.id, e)}>✕</button>
                 <span className="proj-brand-tag" style={{ ...parseStyle(bs) }}>{p.brand}</span>
                 <div className="proj-name">{p.name}</div>
                 <div className="proj-desc">{p.desc || '설명 없음'}</div>
@@ -121,6 +132,16 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
             );
           })}
         </div>
+      )}
+
+      {/* Detail Panel */}
+      {selectedProj && (
+        <DetailPanel
+          type="project"
+          item={selectedProj}
+          onSave={item => handlePanelSave(item as Project)}
+          onClose={() => setSelectedId(null)}
+        />
       )}
 
       {/* Modal */}

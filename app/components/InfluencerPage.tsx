@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { AVCOL, BRAND_STYLE, INF_STAT_MAP } from '../constants';
 import type { Influencer } from '../types';
+import DetailPanel from './DetailPanel';
 
 interface InfluencerPageProps {
   influencers: Influencer[];
@@ -17,6 +18,8 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState<'all' | 'active' | 'standby' | 'end'>('all');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selectedInf = selectedId != null ? influencers.find(i => i.id === selectedId) ?? null : null;
 
   const INF_ORDER: Record<string, number> = { active: 0, standby: 1, end: 2 };
   const filtered = (filter === 'all' ? influencers : influencers.filter(i => i.status === filter))
@@ -36,15 +39,23 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
       end: form.end,
       status: form.status,
       color: AVCOL[influencers.length % AVCOL.length],
+      notes: '', actions: [],
     };
     setInfluencers([...influencers, newInf]);
     setForm(EMPTY_FORM);
     setOpen(false);
   }
 
-  function handleDelete(id: number) {
+  function handleDelete(id: number, e: React.MouseEvent) {
+    e.stopPropagation();
     if (!confirm('삭제할까요?')) return;
     setInfluencers(influencers.filter(i => i.id !== id));
+    if (selectedId === id) setSelectedId(null);
+  }
+
+  function handlePanelSave(updated: Influencer) {
+    setInfluencers(influencers.map(i => i.id === updated.id ? updated : i));
+    setSelectedId(null);
   }
 
   return (
@@ -77,8 +88,8 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
             const st = INF_STAT_MAP[inf.status];
             const bs = BRAND_STYLE[inf.brand] || BRAND_STYLE['기타'];
             return (
-              <div key={inf.id} className="inf-card sli">
-                <button className="xbtn" onClick={() => handleDelete(inf.id)}>✕</button>
+              <div key={inf.id} className="inf-card sli" onClick={() => setSelectedId(inf.id)} style={{ cursor: 'pointer' }}>
+                <button className="xbtn" onClick={e => handleDelete(inf.id, e)}>✕</button>
                 <div className="inf-av" style={{ background: inf.color }}>
                   {inf.name.charAt(0)}
                 </div>
@@ -113,6 +124,16 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
             );
           })}
         </div>
+      )}
+
+      {/* Detail Panel */}
+      {selectedInf && (
+        <DetailPanel
+          type="influencer"
+          item={selectedInf}
+          onSave={item => handlePanelSave(item as Influencer)}
+          onClose={() => setSelectedId(null)}
+        />
       )}
 
       {/* Modal */}
