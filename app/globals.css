@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #0a0a0b;
-  --surface: #111114;
-  --surface2: #18181d;
-  --surface3: #1f1f26;
-  --border: #2a2a35;
-  --border2: #383845;
-  --rose: #e8a0a8;
-  --rose2: #f2c4ca;
-  --rose-dim: rgba(232,160,168,0.12);
-  --rose-glow: rgba(232,160,168,0.06);
-  --gold: #c9a96e;
-  --gold2: #e2c48a;
-  --mint: #7ecec4;
-  --lavender: #a89ee8;
-  --text: #f0eef5;
-  --text2: #9896a8;
-  --text3: #55535f;
-  --danger: #e87070;
-  --success: #70e8a0;
+  --bg: #ffffff;
+  --surface: #f8f9fa;
+  --surface2: #f1f3f5;
+  --surface3: #e8eaed;
+  --border: #e0e0e0;
+  --border2: #c6cad0;
+  --rose: #d4596a;
+  --rose2: #b03045;
+  --rose-dim: rgba(212,89,106,0.1);
+  --rose-glow: rgba(212,89,106,0.05);
+  --gold: #b8832a;
+  --gold2: #9a6d18;
+  --mint: #2b9e94;
+  --lavender: #7b6fd4;
+  --text: #202124;
+  --text2: #5f6368;
+  --text3: #9aa0a6;
+  --danger: #d93025;
+  --success: #1e8e3e;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -55,7 +55,7 @@ body {
   left: -60px;
   width: 200px;
   height: 200px;
-  background: radial-gradient(circle, rgba(232,160,168,0.08), transparent 70%);
+  background: radial-gradient(circle, rgba(212,89,106,0.06), transparent 70%);
   pointer-events: none;
 }
 .brand { padding: 28px 22px 22px; border-bottom: 1px solid var(--border); }
@@ -490,7 +490,7 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   margin-bottom: 2px;
   border-radius: 3px;
   border-left: 2px solid;
-  background: rgba(255,255,255,0.04);
+  background: rgba(0,0,0,0.04);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -527,8 +527,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 
 /* ── GCAL ── */
 .gcal-info {
-  background: rgba(232,160,168,.06);
-  border: 1px solid rgba(232,160,168,.15);
+  background: rgba(212,89,106,.06);
+  border: 1px solid rgba(212,89,106,.15);
   border-radius: 10px;
   padding: 12px 15px;
   margin-bottom: 16px;
@@ -900,7 +900,7 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 .modal-ov {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.75);
+  background: rgba(0,0,0,.45);
   display: none;
   align-items: center;
   justify-content: center;

@@ -1,14 +1,14 @@
 import { Brand, EventCategory, ProjectStatus, InfluencerStatus, TeamStatus } from './types';
 
-export const AVCOL = ['#e8a0a8', '#c9a96e', '#7ecec4', '#a89ee8', '#e87070', '#70c8e8'];
+export const AVCOL = ['#d4596a', '#b8832a', '#2b9e94', '#7b6fd4', '#c94444', '#2b88b8'];
 
 export const BRAND_STYLE: Record<Brand, string> = {
-  '이너피움': 'background:rgba(126,206,196,.15);color:#7ecec4;',
-  '아쿠아크': 'background:rgba(232,160,168,.15);color:#e8a0a8;',
-  '문화콘텐츠': 'background:rgba(168,158,232,.15);color:#a89ee8;',
-  '에이전시': 'background:rgba(201,169,110,.15);color:#c9a96e;',
-  '공구': 'background:rgba(201,169,110,.15);color:#c9a96e;',
-  '기타': 'background:rgba(85,83,95,.2);color:#9896a8;',
+  '이너피움': 'background:rgba(43,158,148,.12);color:#2b9e94;',
+  '아쿠아크': 'background:rgba(212,89,106,.12);color:#d4596a;',
+  '문화콘텐츠': 'background:rgba(123,111,212,.12);color:#7b6fd4;',
+  '에이전시': 'background:rgba(184,131,42,.12);color:#b8832a;',
+  '공구': 'background:rgba(184,131,42,.12);color:#b8832a;',
+  '기타': 'background:rgba(150,150,160,.1);color:#6b6978;',
 };
 
 export const INF_STAT_MAP: Record<InfluencerStatus, { cls: string; lbl: string }> = {
@@ -18,9 +18,9 @@ export const INF_STAT_MAP: Record<InfluencerStatus, { cls: string; lbl: string }
 };
 
 export const PROJ_COLOR: Record<ProjectStatus, string> = {
-  active: 'var(--mint)',
-  hold: 'var(--gold)',
-  done: 'var(--rose)',
+  active: '#2b9e94',
+  hold: '#b8832a',
+  done: '#d4596a',
 };
 
 export const PROJ_STAT: Record<ProjectStatus, { cls: string; lbl: string }> = {
@@ -30,11 +30,11 @@ export const PROJ_STAT: Record<ProjectStatus, { cls: string; lbl: string }> = {
 };
 
 export const CAT_COL: Record<EventCategory, string> = {
-  '공구': 'var(--rose)',
-  '캠페인': 'var(--mint)',
-  '전시': 'var(--lavender)',
-  '미팅': 'var(--gold)',
-  '기타': 'var(--text2)',
+  '공구': '#d4596a',
+  '캠페인': '#2b9e94',
+  '전시': '#7b6fd4',
+  '미팅': '#b8832a',
+  '기타': '#9aa0a6',
 };
 
 export const TEAM_STAT: Record<TeamStatus, { cls: string; lbl: string }> = {

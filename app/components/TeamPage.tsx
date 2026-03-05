@@ -67,7 +67,7 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
         </div>
       ) : (
         <div className="team-grid">
-          {members.map(m => {
+          {members.slice().sort((a, b) => { const o: Record<string, number> = { a: 0, w: 1, l: 2 }; return (o[a.status] ?? 9) - (o[b.status] ?? 9); }).map(m => {
             const ms = TEAM_STAT[m.status];
             return (
               <div key={m.id} className="mem-card sli">

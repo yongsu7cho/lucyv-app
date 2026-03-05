@@ -18,7 +18,9 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState<'all' | 'active' | 'standby' | 'end'>('all');
 
-  const filtered = filter === 'all' ? influencers : influencers.filter(i => i.status === filter);
+  const INF_ORDER: Record<string, number> = { active: 0, standby: 1, end: 2 };
+  const filtered = (filter === 'all' ? influencers : influencers.filter(i => i.status === filter))
+    .slice().sort((a, b) => (INF_ORDER[a.status] ?? 9) - (INF_ORDER[b.status] ?? 9));
 
   function handleAdd() {
     if (!form.name.trim()) return;

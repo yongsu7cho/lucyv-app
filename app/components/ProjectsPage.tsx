@@ -18,7 +18,9 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState<'all' | 'active' | 'hold' | 'done'>('all');
 
-  const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter);
+  const PROJ_ORDER: Record<string, number> = { active: 0, hold: 1, done: 2 };
+  const filtered = (filter === 'all' ? projects : projects.filter(p => p.status === filter))
+    .slice().sort((a, b) => (PROJ_ORDER[a.status] ?? 9) - (PROJ_ORDER[b.status] ?? 9));
 
   function handleAdd() {
     if (!form.name.trim()) return;
