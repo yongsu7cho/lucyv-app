@@ -49,6 +49,24 @@ function eventTime(ev: GCalEvent): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// Korean AM/PM format: "AM 11시", "PM 2시 30분"
+function eventTimeKo(ev: GCalEvent): string {
+  if (!ev.start.dateTime) return '';
+  const d = new Date(ev.start.dateTime);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const ampm = h < 12 ? 'AM' : 'PM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return m === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}시 ${m}분`;
+}
+
+// Show "N월 1일" for first day of month, otherwise just number
+function dateLabelKo(key: string, day: number): string {
+  if (!key || day !== 1) return String(day);
+  const m = parseInt(key.split('-')[1] ?? '1');
+  return `${m}월 1일`;
+}
+
 function groupByDate(items: GCalEvent[]): GCalMap {
   const map: GCalMap = {};
   for (const ev of items) {
@@ -560,38 +578,8 @@ function GcalConnectedView({
   eventsLoading, eventsError, email,
   onPrev, onNext, onToday, onDisconnect,
 }: GcalConnectedViewProps) {
-  const [detail, setDetail] = useState<{ key: string; x: number; y: number } | null>(null);
-  const detailRef = useRef<HTMLDivElement>(null);
-
-  // Close detail on outside click
-  useEffect(() => {
-    if (!detail) return;
-    const handler = (e: MouseEvent) => {
-      if (detailRef.current && !detailRef.current.contains(e.target as Node)) {
-        setDetail(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [detail]);
-
-  function openDetail(key: string, e: React.MouseEvent) {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    // position popover below the clicked cell, adjusted to stay in viewport
-    const x = Math.min(rect.left, window.innerWidth - 340);
-    const y = rect.bottom + 8 + window.scrollY;
-    setDetail({ key, x, y });
-  }
-
-  const detailEvs = detail
-    ? (gcalMap[detail.key] ?? []).slice().sort((a, b) =>
-        (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? ''))
-    : [];
-  const [dY, dMon, dD] = (detail?.key ?? '--').split('-');
-
   return (
-    <div>
+    <div className="gcal-white">
       {/* Status bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -614,8 +602,8 @@ function GcalConnectedView({
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
           {calSources.map(([name, color]) => (
             <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: 8, height: 8, borderRadius: 2, background: color ?? 'var(--rose)', flexShrink: 0 }} />
-              <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>{name}</span>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: color ?? DEFAULT_EVENT_COLOR, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: 'var(--text2)' }}>{name}</span>
             </div>
           ))}
         </div>
@@ -628,20 +616,24 @@ function GcalConnectedView({
       )}
 
       {/* Header */}
-      <div className="cal-head" style={{ marginBottom: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="cal-nav-btn" onClick={onPrev}>‹</button>
-          <div className="cal-mo">{MONTHS_EN[calM]} {calY}</div>
+          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: '#111' }}>
+            {calY}년 {calM + 1}월
+          </div>
           <button className="cal-nav-btn" onClick={onNext}>›</button>
         </div>
         <button className="btn btn-ghost btn-sm" onClick={onToday}>오늘</button>
       </div>
 
-      {/* Full grid */}
-      <div className="gcal-full-grid">
-        {/* Day name headers */}
-        {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
-          <div key={d} className="cal-dname" style={{ textAlign: 'center', color: i === 0 ? 'var(--rose)' : i === 6 ? 'var(--lavender)' : undefined }}>
+      {/* White calendar grid */}
+      <div className="gcal-white-grid">
+        {/* Korean day headers */}
+        {['일','월','화','수','목','금','토'].map((d, i) => (
+          <div key={d} className="gcal-white-dname" style={{
+            color: i === 0 ? '#d32f2f' : i === 6 ? '#1565c0' : '#555',
+          }}>
             {d}
           </div>
         ))}
@@ -649,89 +641,51 @@ function GcalConnectedView({
         {/* Day cells */}
         {days.map((d, idx) => {
           const isToday = d.key === todayKey;
-          const dayEvs = d.key ? (gcalMap[d.key] ?? []) : [];
-          const MAX_SHOWN = 3;
+          const dayEvs = d.key ? (gcalMap[d.key] ?? []).slice().sort((a, b) =>
+            (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? '')
+          ) : [];
+          const MAX_SHOWN = 4;
           const shown = dayEvs.slice(0, MAX_SHOWN);
           const overflow = dayEvs.length - MAX_SHOWN;
 
           return (
             <div
               key={idx}
-              className={['gcday', d.outside ? 'om' : '', isToday ? 'today' : ''].filter(Boolean).join(' ')}
-              onClick={d.key && dayEvs.length > 0 ? (e) => openDetail(d.key, e) : undefined}
+              className={['gcal-white-day', d.outside ? 'om' : ''].filter(Boolean).join(' ')}
             >
-              <div className="gcday-num">{d.day}</div>
+              {/* Date number */}
+              <div className={['gcal-white-num', isToday ? 'today' : ''].filter(Boolean).join(' ')}>
+                {dateLabelKo(d.key, d.day)}
+              </div>
+
+              {/* Events */}
               {shown.map(ev => {
                 const color = eventColor(ev);
-                const isAllDay = !ev.start.dateTime;
-                // hex + '99' = 60% opacity — clearly visible on any dark background
-                const bg = isAllDay ? color : color + '99';
+                const timeStr = eventTimeKo(ev);
                 return (
-                  <div
-                    key={ev.id}
-                    className={`gcday-ev${isAllDay ? ' allday' : ''}`}
-                    style={{
-                      background: bg,
-                      color: '#fff',
-                      borderLeft: `3px solid ${color}`,
-                    }}
-                    title={ev.summary ?? '(제목 없음)'}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    {ev.summary ?? '(제목 없음)'}
+                  <div key={ev.id} className="gcal-white-ev" title={`${timeStr} ${ev.summary ?? ''}`}>
+                    <span style={{
+                      display: 'inline-block',
+                      width: 7, height: 7,
+                      borderRadius: '50%',
+                      background: color,
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }} />
+                    <span className="gcal-white-ev-text">
+                      {timeStr && <span style={{ color: '#555', marginRight: 2 }}>{timeStr}</span>}
+                      {ev.summary ?? '(제목 없음)'}
+                    </span>
                   </div>
                 );
               })}
               {overflow > 0 && (
-                <div className="gcday-more">+{overflow}개 더보기</div>
+                <div className="gcal-white-more">+{overflow}개 더보기</div>
               )}
             </div>
           );
         })}
       </div>
-
-      {/* Detail popover */}
-      {detail && (
-        <div
-          ref={detailRef}
-          className="gcal-day-detail"
-          style={{ top: detail.y, left: detail.x }}
-          onClick={e => e.stopPropagation()}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="gcal-detail-date">
-              {parseInt(dY)}년 {parseInt(dMon)}월 {parseInt(dD)}일
-            </div>
-            <button className="xbtn" onClick={() => setDetail(null)} style={{ fontSize: 14 }}>✕</button>
-          </div>
-          {detailEvs.map(ev => {
-            const color = eventColor(ev);
-            return (
-              <div key={ev.id} className="gcal-detail-ev">
-                <div style={{ width: 3, borderRadius: 2, background: color, flexShrink: 0, alignSelf: 'stretch', minHeight: 14 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>
-                    {eventTime(ev)}
-                    {ev.calendarSummary && !ev.isPrimary && (
-                      <span style={{ marginLeft: 6, padding: '1px 4px', borderRadius: 3, background: `${color}20`, color }}>
-                        {ev.calendarSummary}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {ev.summary ?? '(제목 없음)'}
-                  </div>
-                  {ev.description && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {ev.description}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
