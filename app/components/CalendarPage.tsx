@@ -191,11 +191,27 @@ function CompanyCalendar({
           {days.map((d, idx) => {
             const isToday = d.key === todayKey;
             const isSel = d.key === selDay && !isToday;
-            const hasEv = !!d.key && (events[d.key] ?? []).length > 0;
-            const cls = ['cday', d.outside ? 'om' : '', isToday ? 'today' : '', isSel ? 'sel' : '', hasEv ? 'hev' : ''].filter(Boolean).join(' ');
+            const dayEvs = d.key
+              ? (events[d.key] ?? []).slice().sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
+              : [];
+            const MAX = 4;
+            const shown = dayEvs.slice(0, MAX);
+            const overflow = dayEvs.length - MAX;
+            const cls = ['cday', d.outside ? 'om' : '', isToday ? 'today' : '', isSel ? 'sel' : ''].filter(Boolean).join(' ');
             return (
               <div key={idx} className={cls} onClick={() => { if (!d.outside && d.key) setSelDay(d.key); }}>
-                {d.day}
+                <div className="cday-num">{d.day}</div>
+                {shown.map(ev => (
+                  <div
+                    key={ev.id}
+                    className="cday-ev"
+                    style={{ borderLeftColor: CAT_COL[ev.cat] ?? 'var(--rose)', color: CAT_COL[ev.cat] ?? 'var(--rose)' }}
+                    title={`${ev.time ? ev.time + ' · ' : ''}${ev.title}`}
+                  >
+                    {ev.title}
+                  </div>
+                ))}
+                {overflow > 0 && <div className="cday-more">+{overflow}개</div>}
               </div>
             );
           })}
