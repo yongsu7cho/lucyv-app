@@ -267,9 +267,20 @@ function GoogleCalendarTab() {
         setAuthError('인증이 만료되었어요. 다시 연동해주세요.');
         return;
       }
-      if (!res.ok) throw new Error('fetch failed');
 
       const data = await res.json();
+
+      if (!res.ok) {
+        // Calendar API 오류 (403 = API 미활성화, 기타)
+        const apiMsg = data?.message ?? '';
+        if (apiMsg.toLowerCase().includes('calendar api has not been used') || apiMsg.toLowerCase().includes('disabled')) {
+          setEventsError('Google Calendar API가 활성화되어 있지 않아요. Google Cloud Console에서 Calendar API를 활성화해주세요.');
+        } else {
+          setEventsError(`일정을 불러오지 못했어요. (${apiMsg || res.status})`);
+        }
+        return;
+      }
+
       setGcalMap(groupByDate((data.items ?? []) as GCalEvent[]));
     } catch {
       setEventsError('일정을 불러오는 데 실패했어요. 잠시 후 다시 시도해주세요.');
