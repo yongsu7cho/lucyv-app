@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MONTHS_EN, CAT_COL, dk } from '../constants';
 import type { CalendarEventMap, CalendarEvent, EventCategory } from '../types';
 
@@ -392,11 +392,6 @@ function GoogleCalendarTab() {
   const rem = (first + dim) % 7;
   if (rem > 0) for (let i = 1; i <= 7 - rem; i++) days.push({ key: '', day: i, outside: true });
 
-  const selEvs = (gcalMap[selDay] ?? []).slice().sort((a, b) =>
-    (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? '')
-  );
-  const [selY, selMon, selD] = selDay.split('-');
-
   // Collect unique calendar sources for legend
   const calSources = Array.from(
     new Map(
@@ -405,117 +400,16 @@ function GoogleCalendarTab() {
   ).slice(0, 6);
 
   return (
-    <div>
-      {/* Status bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
-            구글 캘린더 연동됨
-          </span>
-          {authStatus.email && (
-            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
-              · {authStatus.email}
-            </span>
-          )}
-          {eventsLoading && (
-            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
-              · 동기화 중...
-            </span>
-          )}
-        </div>
-        <button className="btn btn-danger btn-sm" onClick={handleDisconnect}>연동 해제</button>
-      </div>
-
-      {/* Calendar legend */}
-      {calSources.length > 0 && (
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
-          {calSources.map(([name, color]) => (
-            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: 8, height: 8, borderRadius: 2, background: color ?? 'var(--rose)', flexShrink: 0 }} />
-              <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>{name}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {eventsError && (
-        <div style={{ marginBottom: 14, padding: '8px 14px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--danger)' }}>
-          {eventsError}
-        </div>
-      )}
-
-      {/* Calendar grid + event panel */}
-      <div className="cal-wrap">
-        <div>
-          <div className="cal-head">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button className="cal-nav-btn" onClick={() => changeMonth(-1)}>‹</button>
-              <div className="cal-mo">{MONTHS_EN[calM]} {calY}</div>
-              <button className="cal-nav-btn" onClick={() => changeMonth(1)}>›</button>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setCalY(now.getFullYear()); setCalM(now.getMonth()); setSelDay(dk(now)); }}>
-              오늘
-            </button>
-          </div>
-          <div className="cal-dnames">
-            {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
-              <div key={d} className="cal-dname" style={{ color: i === 0 ? 'var(--rose)' : i === 6 ? 'var(--lavender)' : undefined }}>{d}</div>
-            ))}
-          </div>
-          <div className="cal-days-grid">
-            {days.map((d, idx) => {
-              const isToday = d.key === todayKey;
-              const isSel = d.key === selDay && !isToday;
-              const evCount = d.key ? (gcalMap[d.key] ?? []).length : 0;
-              const cls = ['cday', d.outside ? 'om' : '', isToday ? 'today' : '', isSel ? 'sel' : '', evCount > 0 ? 'hev' : ''].filter(Boolean).join(' ');
-              return (
-                <div
-                  key={idx}
-                  className={cls}
-                  onClick={() => { if (!d.outside && d.key) setSelDay(d.key); }}
-                  title={evCount > 0 ? `${evCount}개 일정` : undefined}
-                >
-                  {d.day}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Event panel for selected day */}
-        <div className="ev-panel">
-          <div className="ev-date-lbl">{parseInt(selY)}년 {parseInt(selMon)}월 {parseInt(selD)}일</div>
-          {selEvs.length === 0 ? (
-            <div className="empty" style={{ padding: '24px 0' }}>
-              <div className="empty-icon" style={{ fontSize: 24 }}>📅</div>
-              <p style={{ fontSize: 12 }}>구글 일정이 없어요</p>
-            </div>
-          ) : (
-            selEvs.map(ev => {
-              const color = eventColor(ev);
-              return (
-                <div key={ev.id} className="ev-item" style={{ borderLeftColor: color }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="ev-time" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span>{eventTime(ev)}</span>
-                      {ev.calendarSummary && !ev.isPrimary && (
-                        <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: `${color}22`, color, fontFamily: "'DM Mono', monospace" }}>
-                          {ev.calendarSummary}
-                        </span>
-                      )}
-                    </div>
-                    <div className="ev-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {ev.summary ?? '(제목 없음)'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
+    <GcalConnectedView
+      calY={calY} calM={calM} days={days} gcalMap={gcalMap}
+      todayKey={todayKey} calSources={calSources}
+      eventsLoading={eventsLoading} eventsError={eventsError}
+      email={authStatus.email}
+      onPrev={() => changeMonth(-1)}
+      onNext={() => changeMonth(1)}
+      onToday={() => { setCalY(now.getFullYear()); setCalM(now.getMonth()); }}
+      onDisconnect={handleDisconnect}
+    />
   );
 }
 
@@ -636,6 +530,202 @@ GOOGLE_CLIENT_SECRET=xxx`}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────
+// GCAL CONNECTED: full-grid view
+// ────────────────────────────────────────────
+interface GcalConnectedViewProps {
+  calY: number; calM: number;
+  days: { key: string; day: number; outside: boolean }[];
+  gcalMap: GCalMap;
+  todayKey: string;
+  calSources: [string | undefined, string | undefined][];
+  eventsLoading: boolean;
+  eventsError: string | null;
+  email: string | null;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  onDisconnect: () => void;
+}
+
+function GcalConnectedView({
+  calY, calM, days, gcalMap, todayKey, calSources,
+  eventsLoading, eventsError, email,
+  onPrev, onNext, onToday, onDisconnect,
+}: GcalConnectedViewProps) {
+  const [detail, setDetail] = useState<{ key: string; x: number; y: number } | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  // Close detail on outside click
+  useEffect(() => {
+    if (!detail) return;
+    const handler = (e: MouseEvent) => {
+      if (detailRef.current && !detailRef.current.contains(e.target as Node)) {
+        setDetail(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [detail]);
+
+  function openDetail(key: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // position popover below the clicked cell, adjusted to stay in viewport
+    const x = Math.min(rect.left, window.innerWidth - 340);
+    const y = rect.bottom + 8 + window.scrollY;
+    setDetail({ key, x, y });
+  }
+
+  const detailEvs = detail
+    ? (gcalMap[detail.key] ?? []).slice().sort((a, b) =>
+        (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? ''))
+    : [];
+  const [dY, dMon, dD] = (detail?.key ?? '--').split('-');
+
+  return (
+    <div>
+      {/* Status bar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+            구글 캘린더 연동됨
+          </span>
+          {email && (
+            <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>· {email}</span>
+          )}
+          {eventsLoading && (
+            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>· 동기화 중...</span>
+          )}
+        </div>
+        <button className="btn btn-danger btn-sm" onClick={onDisconnect}>연동 해제</button>
+      </div>
+
+      {/* Legend */}
+      {calSources.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+          {calSources.map(([name, color]) => (
+            <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 8, height: 8, borderRadius: 2, background: color ?? 'var(--rose)', flexShrink: 0 }} />
+              <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>{name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {eventsError && (
+        <div style={{ marginBottom: 12, padding: '8px 14px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 8, fontSize: 12, color: 'var(--danger)' }}>
+          {eventsError}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="cal-head" style={{ marginBottom: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button className="cal-nav-btn" onClick={onPrev}>‹</button>
+          <div className="cal-mo">{MONTHS_EN[calM]} {calY}</div>
+          <button className="cal-nav-btn" onClick={onNext}>›</button>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={onToday}>오늘</button>
+      </div>
+
+      {/* Full grid */}
+      <div className="gcal-full-grid">
+        {/* Day name headers */}
+        {['SUN','MON','TUE','WED','THU','FRI','SAT'].map((d, i) => (
+          <div key={d} className="cal-dname" style={{ textAlign: 'center', color: i === 0 ? 'var(--rose)' : i === 6 ? 'var(--lavender)' : undefined }}>
+            {d}
+          </div>
+        ))}
+
+        {/* Day cells */}
+        {days.map((d, idx) => {
+          const isToday = d.key === todayKey;
+          const dayEvs = d.key ? (gcalMap[d.key] ?? []) : [];
+          const MAX_SHOWN = 3;
+          const shown = dayEvs.slice(0, MAX_SHOWN);
+          const overflow = dayEvs.length - MAX_SHOWN;
+
+          return (
+            <div
+              key={idx}
+              className={['gcday', d.outside ? 'om' : '', isToday ? 'today' : ''].filter(Boolean).join(' ')}
+              onClick={d.key && dayEvs.length > 0 ? (e) => openDetail(d.key, e) : undefined}
+            >
+              <div className="gcday-num">{d.day}</div>
+              {shown.map(ev => {
+                const color = eventColor(ev);
+                const isAllDay = !ev.start.dateTime;
+                return (
+                  <div
+                    key={ev.id}
+                    className={`gcday-ev${isAllDay ? ' allday' : ''}`}
+                    style={{
+                      background: isAllDay ? color : `${color}18`,
+                      color: isAllDay ? '#fff' : color,
+                      borderLeft: isAllDay ? 'none' : `2px solid ${color}`,
+                    }}
+                    title={ev.summary ?? '(제목 없음)'}
+                  >
+                    {isAllDay ? '' : `${eventTime(ev)} `}{ev.summary ?? '(제목 없음)'}
+                  </div>
+                );
+              })}
+              {overflow > 0 && (
+                <div className="gcday-more">+{overflow}개 더보기</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Detail popover */}
+      {detail && (
+        <div
+          ref={detailRef}
+          className="gcal-day-detail"
+          style={{ top: detail.y, left: detail.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="gcal-detail-date">
+              {parseInt(dY)}년 {parseInt(dMon)}월 {parseInt(dD)}일
+            </div>
+            <button className="xbtn" onClick={() => setDetail(null)} style={{ fontSize: 14 }}>✕</button>
+          </div>
+          {detailEvs.map(ev => {
+            const color = eventColor(ev);
+            return (
+              <div key={ev.id} className="gcal-detail-ev">
+                <div style={{ width: 3, borderRadius: 2, background: color, flexShrink: 0, alignSelf: 'stretch', minHeight: 14 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>
+                    {eventTime(ev)}
+                    {ev.calendarSummary && !ev.isPrimary && (
+                      <span style={{ marginLeft: 6, padding: '1px 4px', borderRadius: 3, background: `${color}20`, color }}>
+                        {ev.calendarSummary}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {ev.summary ?? '(제목 없음)'}
+                  </div>
+                  {ev.description && (
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ev.description}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
