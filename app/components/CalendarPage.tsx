@@ -286,7 +286,18 @@ function GoogleCalendarTab() {
 
     if (gcal || err) {
       window.history.replaceState({}, '', '/');
-      if (err) setAuthError('구글 로그인에 실패했어요. 다시 시도해주세요.');
+      if (err) {
+        const errMessages: Record<string, string> = {
+          auth_failed: '구글 로그인이 취소되었거나 실패했어요. 다시 시도해주세요.',
+          missing_credentials:
+            'GOOGLE_CLIENT_SECRET 환경변수가 설정되지 않았습니다. .env.local 파일을 확인해주세요.',
+          token_exchange_failed:
+            '구글 서버와 통신에 실패했어요. 네트워크를 확인 후 다시 시도해주세요.',
+          no_access_token:
+            '구글 인증은 성공했지만 토큰을 받지 못했어요. Client ID/Secret이 올바른지 확인해주세요.',
+        };
+        setAuthError(errMessages[err] ?? `구글 로그인에 실패했어요. (오류 코드: ${err})`);
+      }
     }
 
     checkStatus();
@@ -507,9 +518,18 @@ function GoogleConnectUI({ onConnect, error }: { onConnect: () => void; error: s
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {error && (
-        <div style={{ padding: '10px 16px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 10, fontSize: 12, color: 'var(--danger)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-          <span>⚠</span>
-          <span>{error}</span>
+        <div style={{ padding: '10px 16px', background: 'rgba(232,112,112,0.08)', border: '1px solid rgba(232,112,112,0.2)', borderRadius: 10, fontSize: 12, color: 'var(--danger)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <span>⚠</span>
+            <span>{error}</span>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', paddingLeft: 20 }}>
+            Google Cloud Console → OAuth 2.0 → 승인된 리디렉션 URI에&nbsp;
+            <code style={{ fontFamily: "'DM Mono', monospace" }}>
+              {typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/callback/google
+            </code>
+            &nbsp;이 등록되어 있는지 확인하세요.
+          </div>
         </div>
       )}
 
