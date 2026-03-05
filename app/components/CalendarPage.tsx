@@ -30,10 +30,13 @@ const GCOLOR: Record<string, string> = {
   '9': '#3F51B5', '10': '#0B8043', '11': '#D50000',
 };
 
+// Always return a real hex color (never a CSS variable string)
+const DEFAULT_EVENT_COLOR = '#e8a0a8';
+
 function eventColor(ev: GCalEvent): string {
-  if (ev.colorId) return GCOLOR[ev.colorId] ?? 'var(--rose)';
+  if (ev.colorId) return GCOLOR[ev.colorId] ?? DEFAULT_EVENT_COLOR;
   if (ev.calendarColor) return ev.calendarColor;
-  return 'var(--rose)';
+  return DEFAULT_EVENT_COLOR;
 }
 
 function eventDate(ev: GCalEvent): string {
@@ -661,15 +664,16 @@ function GcalConnectedView({
               {shown.map(ev => {
                 const color = eventColor(ev);
                 const isAllDay = !ev.start.dateTime;
+                // hex + '99' = 60% opacity — clearly visible on any dark background
+                const bg = isAllDay ? color : color + '99';
                 return (
                   <div
                     key={ev.id}
                     className={`gcday-ev${isAllDay ? ' allday' : ''}`}
                     style={{
-                      background: isAllDay ? color : `${color}28`,
-                      color: isAllDay ? '#fff' : color,
-                      borderLeft: isAllDay ? `3px solid ${color}` : `3px solid ${color}`,
-                      fontWeight: isAllDay ? 700 : 500,
+                      background: bg,
+                      color: '#fff',
+                      borderLeft: `3px solid ${color}`,
                     }}
                     title={ev.summary ?? '(제목 없음)'}
                     onClick={e => e.stopPropagation()}
