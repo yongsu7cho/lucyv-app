@@ -1,4 +1,4 @@
-export type TabName = 'dashboard' | 'influencer' | 'projects' | 'calendar' | 'settlement' | 'team';
+export type TabName = 'dashboard' | 'influencer' | 'projects' | 'calendar' | 'settlement' | 'team' | 'memo';
 
 export type Brand = '이너피움' | '아쿠아크' | '문화콘텐츠' | '에이전시' | '공구' | '기타';
 export type InfluencerStatus = 'active' | 'standby' | 'end';
@@ -48,6 +48,14 @@ export interface Settlement {
   amount: number;
   brand: Brand;
   memo: string;
+}
+
+export interface Memo {
+  id: number;
+  title: string;
+  content: string;
+  color: string; // accent color hex
+  updatedAt: string; // ISO string
 }
 
 export interface TeamMember {

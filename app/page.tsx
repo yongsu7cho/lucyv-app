@@ -9,7 +9,8 @@ import ProjectsPage from './components/ProjectsPage';
 import CalendarPage from './components/CalendarPage';
 import SettlementPage from './components/SettlementPage';
 import TeamPage from './components/TeamPage';
-import type { TabName, Influencer, Project, CalendarEventMap, Settlement, TeamMember } from './types';
+import MemoPage from './components/MemoPage';
+import type { TabName, Influencer, Project, CalendarEventMap, Settlement, TeamMember, Memo } from './types';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('dashboard');
@@ -20,6 +21,7 @@ export default function Home() {
   const [events, setEvents] = useState<CalendarEventMap>({});
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [memos, setMemos] = useState<Memo[]>([]);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -29,11 +31,13 @@ export default function Home() {
       const e = localStorage.getItem('lv_events');
       const s = localStorage.getItem('lv_settle');
       const m = localStorage.getItem('lv_team');
+      const mo = localStorage.getItem('lv_memos');
       if (i) setInfluencers(JSON.parse(i));
       if (p) setProjects(JSON.parse(p));
       if (e) setEvents(JSON.parse(e));
       if (s) setSettlements(JSON.parse(s));
       if (m) setMembers(JSON.parse(m));
+      if (mo) setMemos(JSON.parse(mo));
     } catch {}
     setMounted(true);
   }, []);
@@ -63,6 +67,11 @@ export default function Home() {
     if (!mounted) return;
     localStorage.setItem('lv_team', JSON.stringify(members));
   }, [members, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem('lv_memos', JSON.stringify(memos));
+  }, [memos, mounted]);
 
   // Handle Google OAuth redirect: switch to calendar tab
   useEffect(() => {
@@ -137,6 +146,12 @@ export default function Home() {
             <TeamPage
               members={members}
               setMembers={setMembers}
+            />
+          )}
+          {activeTab === 'memo' && (
+            <MemoPage
+              memos={memos}
+              setMemos={setMemos}
             />
           )}
         </div>
