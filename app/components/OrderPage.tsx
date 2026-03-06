@@ -269,7 +269,10 @@ export default function OrderPage() {
 
   function downloadAll() {
     if (allRows.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(allRows, { header: [...ORDER_COLUMNS] });
+    const rowsWithPlatform = entries.flatMap(e =>
+      e.rows.map(r => ({ 플랫폼: e.platform, ...r }))
+    );
+    const ws = XLSX.utils.json_to_sheet(rowsWithPlatform, { header: ['플랫폼', ...ORDER_COLUMNS] });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '발주서');
     XLSX.writeFile(wb, `발주서_전체_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -291,15 +294,16 @@ export default function OrderPage() {
           padding: '12px 16px', background: 'var(--surface2)',
           border: '1px solid var(--border)', borderRadius: 12, marginBottom: 20,
         }}>
-          {activePlatforms.map(p => (
-            <span key={p} style={{ fontSize: 12, color: 'var(--text2)' }}>
+          {activePlatforms.map((p, i) => (
+            <span key={p} style={{ fontSize: 12, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {i > 0 && <span style={{ color: 'var(--border)' }}>/</span>}
               <span style={{ fontWeight: 700, color: 'var(--text)' }}>{p}</span>
               {' '}{countByPlatform[p]}건
             </span>
           ))}
           {activePlatforms.length > 0 && (
             <>
-              <span style={{ color: 'var(--border)' }}>|</span>
+              <span style={{ color: 'var(--border)' }}>/</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--rose)' }}>
                 총 {allRows.length}건
               </span>
