@@ -21,6 +21,12 @@ const ORDER_COLUMNS = [
 type OrderRow = Record<typeof ORDER_COLUMNS[number], string>;
 type RawRow = Record<string, string>;
 
+interface AccumulatedEntry {
+  platform: Platform;
+  fileName: string;
+  rows: OrderRow[];
+}
+
 function baseRow(): OrderRow {
   return {
     보내시는분: FIXED.보내시는분,
@@ -102,7 +108,6 @@ function parseNormal(wb: XLSX.WorkBook): RawRow[] {
   return XLSX.utils.sheet_to_json<RawRow>(ws, { defval: '' });
 }
 
-// 스마트스토어: row 0 = 안내문, row 1 = 실제 헤더
 function parseSkipFirstRow(wb: XLSX.WorkBook): RawRow[] {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const all = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
@@ -115,7 +120,6 @@ function parseSkipFirstRow(wb: XLSX.WorkBook): RawRow[] {
   }).filter(obj => Object.values(obj).some(v => v !== ''));
 }
 
-// 무신사: .xls 파일이지만 실제로는 HTML 테이블
 function parseHTMLTable(html: string): RawRow[] {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const rows = Array.from(doc.querySelectorAll('tr'));
@@ -189,11 +193,18 @@ const TD: React.CSSProperties = {
 
 export default function OrderPage() {
   const [platform, setPlatform] = useState<Platform>('카페24');
-  const [rows, setRows] = useState<OrderRow[]>([]);
-  const [fileName, setFileName] = useState('');
+  const [entries, setEntries] = useState<AccumulatedEntry[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const allRows = entries.flatMap(e => e.rows);
+
+  // Count per platform (summed across possibly multiple uploads of same platform)
+  const countByPlatform = PLATFORMS.reduce<Record<Platform, number>>((acc, p) => {
+    acc[p] = entries.filter(e => e.platform === p).reduce((s, e) => s + e.rows.length, 0);
+    return acc;
+  }, {} as Record<Platform, number>);
 
   async function processFile(file: File) {
     setError('');
@@ -207,11 +218,9 @@ export default function OrderPage() {
       setLoading(false);
       return;
     }
-    setFileName(file.name);
     try {
       let rawRows: RawRow[] = [];
       if (platform === '무신사') {
-        // HTML disguised as XLS — try UTF-8 first, fall back to EUC-KR
         const text = await readText(file, 'UTF-8');
         rawRows = parseHTMLTable(text);
         if (rawRows.length === 0) {
@@ -234,7 +243,8 @@ export default function OrderPage() {
       if (rawRows.length === 0) {
         setError('데이터를 읽을 수 없습니다. 파일 형식을 확인해주세요.');
       } else {
-        setRows(rawRows.map(r => mapRow(platform, r)));
+        const mapped = rawRows.map(r => mapRow(platform, r));
+        setEntries(prev => [...prev, { platform, fileName: file.name, rows: mapped }]);
       }
     } catch {
       setError('파일을 읽는 중 오류가 발생했습니다.');
@@ -257,33 +267,76 @@ export default function OrderPage() {
     e.target.value = '';
   }
 
-  function downloadXLSX() {
-    if (rows.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(rows, { header: [...ORDER_COLUMNS] });
+  function downloadAll() {
+    if (allRows.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(allRows, { header: [...ORDER_COLUMNS] });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '발주서');
-    XLSX.writeFile(wb, `발주서_${platform}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `발주서_전체_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
-  function reset() {
-    setRows([]); setFileName(''); setError('');
+  function removeEntry(idx: number) {
+    setEntries(prev => prev.filter((_, i) => i !== idx));
   }
+
+  const activePlatforms = PLATFORMS.filter(p => countByPlatform[p] > 0);
 
   return (
     <div className="fade-in" style={{ maxWidth: 1100, margin: '0 auto' }}>
+
+      {/* Platform summary bar */}
+      {allRows.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          padding: '12px 16px', background: 'var(--surface2)',
+          border: '1px solid var(--border)', borderRadius: 12, marginBottom: 20,
+        }}>
+          {activePlatforms.map(p => (
+            <span key={p} style={{ fontSize: 12, color: 'var(--text2)' }}>
+              <span style={{ fontWeight: 700, color: 'var(--text)' }}>{p}</span>
+              {' '}{countByPlatform[p]}건
+            </span>
+          ))}
+          {activePlatforms.length > 0 && (
+            <>
+              <span style={{ color: 'var(--border)' }}>|</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--rose)' }}>
+                총 {allRows.length}건
+              </span>
+            </>
+          )}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setEntries([]); setError(''); }}>
+              초기화
+            </button>
+            <button className="btn btn-rose btn-sm" onClick={downloadAll}>
+              ⬇ 전체 발주서 다운로드
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Platform tabs */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', marginBottom: 10, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>
-          플랫폼 선택
+          플랫폼 선택 후 파일 업로드
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {PLATFORMS.map(p => (
             <button
               key={p}
               className={`btn btn-sm ${platform === p ? 'btn-rose' : 'btn-ghost'}`}
-              onClick={() => { setPlatform(p); reset(); }}
+              onClick={() => { setPlatform(p); setError(''); }}
             >
               {p}
+              {countByPlatform[p] > 0 && (
+                <span style={{
+                  marginLeft: 6, fontSize: 9, fontFamily: "'DM Mono', monospace",
+                  background: 'rgba(255,255,255,0.25)', borderRadius: 8, padding: '1px 5px',
+                }}>
+                  {countByPlatform[p]}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -298,7 +351,7 @@ export default function OrderPage() {
         style={{
           border: `2px dashed ${dragging ? 'var(--rose)' : 'var(--border)'}`,
           borderRadius: 14,
-          padding: '40px 20px',
+          padding: '32px 20px',
           textAlign: 'center',
           cursor: loading ? 'wait' : 'pointer',
           background: dragging ? 'rgba(180,60,90,0.04)' : 'var(--surface2)',
@@ -313,54 +366,88 @@ export default function OrderPage() {
           style={{ display: 'none' }}
           onChange={onFileInput}
         />
-        <div style={{ fontSize: 28, marginBottom: 10 }}>{loading ? '⏳' : '📂'}</div>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
-          {loading ? '파일 처리 중...' : fileName || '파일을 드래그하거나 클릭해서 업로드'}
+        <div style={{ fontSize: 24, marginBottom: 8 }}>{loading ? '⏳' : '📂'}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+          {loading ? '파일 처리 중...' : `${platform} 파일 업로드`}
         </div>
         <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
-          {FILE_HINT[platform]} / 현재 플랫폼: {platform}
+          {FILE_HINT[platform]} · 드래그앤드롭 또는 클릭
         </div>
         {error && (
           <div style={{ marginTop: 10, fontSize: 12, color: 'var(--rose)', fontWeight: 600 }}>{error}</div>
         )}
       </div>
 
-      {/* Preview + download */}
-      {rows.length > 0 && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ fontSize: 12, color: 'var(--text2)' }}>
-              <span style={{ fontWeight: 700, color: 'var(--text)' }}>{rows.length}건</span> 변환 완료
-              <span style={{ marginLeft: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>{fileName}</span>
+      {/* Uploaded entries list */}
+      {entries.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+          {entries.map((entry, idx) => (
+            <div key={idx} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 14px', background: 'var(--surface2)',
+              border: '1px solid var(--border)', borderRadius: 10, fontSize: 12,
+            }}>
+              <span style={{ fontWeight: 600, color: 'var(--rose)', minWidth: 60 }}>{entry.platform}</span>
+              <span style={{ color: 'var(--text3)', fontFamily: "'DM Mono', monospace", flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {entry.fileName}
+              </span>
+              <span style={{ color: 'var(--text2)', fontWeight: 700, minWidth: 40, textAlign: 'right' }}>
+                {entry.rows.length}건
+              </span>
+              <button
+                onClick={() => removeEntry(idx)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, padding: '0 4px', flexShrink: 0 }}
+              >
+                ✕
+              </button>
             </div>
-            <button className="btn btn-rose btn-sm" onClick={downloadXLSX}>
-              ⬇ 발주서 다운로드
-            </button>
-          </div>
+          ))}
+        </div>
+      )}
 
-          <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)' }}>
+      {/* Preview table */}
+      {allRows.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginBottom: 10 }}>
+            미리보기 (전체 {allRows.length}건)
+          </div>
+          <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 14 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
               <thead>
                 <tr style={{ background: 'var(--surface2)' }}>
                   <th style={TH}>#</th>
+                  <th style={TH}>플랫폼</th>
                   {PREVIEW_COLS.map(col => <th key={col} style={TH}>{col}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)' }}>
-                    <td style={TD}>{i + 1}</td>
-                    {PREVIEW_COLS.map(col => <td key={col} style={TD}>{row[col]}</td>)}
-                  </tr>
-                ))}
+                {entries.flatMap((entry, ei) =>
+                  entry.rows.map((row, ri) => {
+                    const globalIdx = entries.slice(0, ei).reduce((s, e) => s + e.rows.length, 0) + ri;
+                    return (
+                      <tr key={`${ei}-${ri}`} style={{ borderTop: '1px solid var(--border)', background: globalIdx % 2 === 0 ? 'var(--surface)' : 'var(--surface2)' }}>
+                        <td style={TD}>{globalIdx + 1}</td>
+                        <td style={{ ...TD, fontWeight: 600, color: 'var(--rose)' }}>{entry.platform}</td>
+                        {PREVIEW_COLS.map(col => <td key={col} style={TD}>{row[col]}</td>)}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
-
-          <div style={{ marginTop: 14, padding: '12px 16px', background: 'var(--surface2)', borderRadius: 10, border: '1px solid var(--border)', fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
+          <div style={{ padding: '12px 16px', background: 'var(--surface2)', borderRadius: 10, border: '1px solid var(--border)', fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
             고정값 — 보내시는분: {FIXED.보내시는분} · 전화: {FIXED.보내시는분전화번호} · 주소: {FIXED.보내는사람주소}
           </div>
         </>
+      )}
+
+      {/* Empty state */}
+      {allRows.length === 0 && !loading && (
+        <div className="empty" style={{ marginTop: 0 }}>
+          <div className="empty-icon">◈</div>
+          <p>플랫폼을 선택하고 파일을 업로드하면 데이터가 누적됩니다</p>
+        </div>
       )}
     </div>
   );
