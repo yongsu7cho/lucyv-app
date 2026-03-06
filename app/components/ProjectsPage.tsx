@@ -113,20 +113,8 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
                 <span className="proj-brand-tag" style={{ ...parseStyle(bs) }}>{p.brand}</span>
                 <div className="proj-name">{p.name}</div>
                 <div className="proj-desc">{p.desc || '설명 없음'}</div>
-                <div className="pbar-wrap">
-                  <div className="pbar">
-                    <div className="pfill" style={{ width: `${p.progress}%`, background: PROJ_COLOR[p.status] }} />
-                  </div>
-                  <div className="plbl">
-                    <span>{p.progress}% 완료</span>
-                    <span>{p.due || '마감 미정'}</span>
-                  </div>
-                </div>
                 <div className="proj-foot">
                   <span className={`status-pill ${ps.cls}`}>{ps.lbl}</span>
-                  {p.start && (
-                    <span className="proj-due">{p.start} ~ {p.due || '?'}</span>
-                  )}
                 </div>
               </div>
             );
