@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { BRAND_STYLE, PROJ_COLOR, PROJ_STAT } from '../constants';
 import type { Project } from '../types';
+import DetailPanel from './DetailPanel';
 
 interface ProjectsPageProps {
   projects: Project[];
@@ -44,7 +45,9 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
   const [details, setDetails] = useState<Record<number, ProjectDetail>>({});
   const [newAction, setNewAction] = useState('');
 
-  const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter);
+  const PROJ_ORDER: Record<string, number> = { active: 0, hold: 1, done: 2 };
+  const filtered = (filter === 'all' ? projects : projects.filter(p => p.status === filter))
+    .slice().sort((a, b) => (PROJ_ORDER[a.status] ?? 9) - (PROJ_ORDER[b.status] ?? 9));
 
   // 진행중 먼저, 완료는 아래로
   const sorted = [...filtered].sort((a, b) => {
@@ -72,6 +75,7 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
       due: form.due,
       progress: Math.min(100, Math.max(0, form.progress)),
       status: form.status,
+      notes: '', actions: [],
     };
     setProjects([...projects, newProj]);
     setForm(EMPTY_FORM);

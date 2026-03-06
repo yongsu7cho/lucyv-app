@@ -24,6 +24,7 @@ function rowToInfluencer(r: any): Influencer {
     id: r.id, name: r.name, handle: r.handle, followers: r.followers,
     count: r.count, tags: r.tags ?? [], brand: r.brand,
     start: r.start_date, end: r.end_date, status: r.status, color: r.color,
+    notes: r.notes ?? '', actions: r.actions ?? [],
   };
 }
 function infToRow(inf: Influencer): Record<string, unknown> {
@@ -31,6 +32,7 @@ function infToRow(inf: Influencer): Record<string, unknown> {
     id: inf.id, name: inf.name, handle: inf.handle, followers: inf.followers,
     count: inf.count, tags: inf.tags, brand: inf.brand,
     start_date: inf.start, end_date: inf.end, status: inf.status, color: inf.color,
+    notes: inf.notes, actions: inf.actions,
   };
 }
 
@@ -39,12 +41,14 @@ function rowToProject(r: any): Project {
   return {
     id: r.id, name: r.name, brand: r.brand, desc: r.description,
     start: r.start_date, due: r.due_date, progress: r.progress, status: r.status,
+    notes: r.notes ?? '', actions: r.actions ?? [],
   };
 }
 function projToRow(p: Project): Record<string, unknown> {
   return {
     id: p.id, name: p.name, brand: p.brand, description: p.desc,
     start_date: p.start, due_date: p.due, progress: p.progress, status: p.status,
+    notes: p.notes, actions: p.actions,
   };
 }
 
@@ -82,10 +86,11 @@ function rowToMember(r: any): TeamMember {
   return {
     id: r.id, name: r.name, role: r.role, email: r.email,
     phone: r.phone, tags: r.tags ?? [], status: r.status, color: r.color,
+    notes: r.notes ?? '', actions: r.actions ?? [],
   };
 }
 function memberToRow(m: TeamMember): Record<string, unknown> {
-  return { id: m.id, name: m.name, role: m.role, email: m.email, phone: m.phone, tags: m.tags, status: m.status, color: m.color };
+  return { id: m.id, name: m.name, role: m.role, email: m.email, phone: m.phone, tags: m.tags, status: m.status, color: m.color, notes: m.notes, actions: m.actions };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
