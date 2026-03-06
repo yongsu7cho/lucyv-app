@@ -1,4 +1,4 @@
-export type TabName = 'dashboard' | 'influencer' | 'projects' | 'calendar' | 'settlement' | 'team' | 'memo' | 'orders';
+export type TabName = 'dashboard' | 'influencer' | 'projects' | 'calendar' | 'settlement' | 'team' | 'memo' | 'orders' | 'meta';
 
 export type Brand = '이너피움' | '아쿠아크' | '문화콘텐츠' | '에이전시' | '공구' | '기타';
 export type InfluencerStatus = 'active' | 'standby' | 'end';
