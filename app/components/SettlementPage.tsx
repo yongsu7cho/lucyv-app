@@ -62,7 +62,7 @@ export default function SettlementPage({ settlements, setSettlements }: Settleme
       {/* KPI */}
       <div className="settle-grid">
         <div className="settle-kpi">
-          <div className="sk-label">총 매출</div>
+          <div className="sk-label">총 발주</div>
           <div className="sk-value" style={{ color: 'var(--rose2)' }}>{fmt(totalIn)}</div>
           <div className="sk-sub">원</div>
         </div>
@@ -84,7 +84,7 @@ export default function SettlementPage({ settlements, setSettlements }: Settleme
       {settlements.length > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-head">
-            <div className="card-title">₩ 월별 매출 추이</div>
+            <div className="card-title">₩ 월별 발주 추이</div>
           </div>
           <div className="card-body">
             <div className="chart-bar-wrap">
@@ -129,7 +129,7 @@ export default function SettlementPage({ settlements, setSettlements }: Settleme
                   className={`btn btn-sm ${filterType === f ? 'btn-rose' : 'btn-ghost'}`}
                   onClick={() => setFilterType(f)}
                 >
-                  {f === 'all' ? '전체' : f === 'in' ? '매출' : '지출'}
+                  {f === 'all' ? '전체' : f === 'in' ? '발주' : '지출'}
                 </button>
               ))}
             </div>
@@ -182,7 +182,7 @@ export default function SettlementPage({ settlements, setSettlements }: Settleme
                       </td>
                       <td>
                         <span style={{ fontSize: 10, fontWeight: 700, color: s.type === 'in' ? 'var(--success)' : 'var(--danger)' }}>
-                          {s.type === 'in' ? '매출' : '지출'}
+                          {s.type === 'in' ? '발주' : '지출'}
                         </span>
                       </td>
                       <td className={`amount ${s.type === 'in' ? 'plus' : 'minus'}`}>
@@ -219,7 +219,7 @@ export default function SettlementPage({ settlements, setSettlements }: Settleme
               <div className="form-lbl">구분</div>
               <select className="input" value={form.type}
                 onChange={e => setForm({ ...form, type: e.target.value as typeof form.type })}>
-                <option value="in">매출 (수입)</option>
+                <option value="in">발주 (수입)</option>
                 <option value="out">지출 (비용)</option>
               </select>
             </div>
