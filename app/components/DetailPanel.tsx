@@ -254,34 +254,28 @@ function ProjectFields({ p, upd }: { p: Project; upd: (f: string, v: unknown) =>
 }
 
 function TeamFields({ m, upd }: { m: TeamMember; upd: (f: string, v: unknown) => void }) {
+  const rows: { label: string; el: React.ReactNode }[] = [
+    { label: '이름', el: <input className="dp-ci" value={m.name} onChange={e => upd('name', e.target.value)} /> },
+    { label: '직책', el: <input className="dp-ci" value={m.role} placeholder="마케팅 · 공구 담당" onChange={e => upd('role', e.target.value)} /> },
+    { label: '이메일', el: <input className="dp-ci" type="email" value={m.email} onChange={e => upd('email', e.target.value)} /> },
+    { label: '연락처', el: <input className="dp-ci" value={m.phone} onChange={e => upd('phone', e.target.value)} /> },
+    { label: '담당 업무', el: <input className="dp-ci" value={m.tags.join(', ')} placeholder="쉼표로 구분" onChange={e => upd('tags', e.target.value.split(',').map(t => t.trim()).filter(Boolean))} /> },
+    { label: '상태', el: (
+      <select className="dp-ci dp-ci-sel" value={m.status} onChange={e => upd('status', e.target.value as TeamStatus)}>
+        <option value="a">재직 중</option>
+        <option value="l">휴가 중</option>
+        <option value="w">외근 중</option>
+      </select>
+    )},
+  ];
   return (
-    <>
-      <Fld label="이름">
-        <input className="input" value={m.name} onChange={e => upd('name', e.target.value)} />
-      </Fld>
-      <Fld label="직책 / 역할">
-        <input className="input" value={m.role} placeholder="마케팅 · 공구 담당" onChange={e => upd('role', e.target.value)} />
-      </Fld>
-      <Fld label="이메일">
-        <input className="input" type="email" value={m.email} onChange={e => upd('email', e.target.value)} />
-      </Fld>
-      <Fld label="연락처">
-        <input className="input" value={m.phone} onChange={e => upd('phone', e.target.value)} />
-      </Fld>
-      <Fld label="담당 업무 (쉼표 구분)">
-        <input
-          className="input"
-          value={m.tags.join(', ')}
-          onChange={e => upd('tags', e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
-        />
-      </Fld>
-      <Fld label="상태">
-        <select className="input" value={m.status} onChange={e => upd('status', e.target.value as TeamStatus)}>
-          <option value="a">재직 중</option>
-          <option value="l">휴가 중</option>
-          <option value="w">외근 중</option>
-        </select>
-      </Fld>
-    </>
+    <div className="dp-compact">
+      {rows.map(({ label, el }) => (
+        <div key={label} className="dp-cr">
+          <span className="dp-cl">{label}</span>
+          {el}
+        </div>
+      ))}
+    </div>
   );
 }
