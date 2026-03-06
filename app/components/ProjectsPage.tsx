@@ -82,8 +82,8 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
     setOpen(false);
   }
 
-  function handleDelete(id: number, e: React.MouseEvent) {
-    e.stopPropagation();
+  function handleDelete(id: number, e?: React.MouseEvent) {
+    e?.stopPropagation();
     if (!confirm('삭제할까요?')) return;
     setProjects(projects.filter(p => p.id !== id));
     if (selectedProject?.id === id) setSelectedProject(null);
@@ -188,7 +188,7 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
                     opacity: p.status === 'done' ? 0.6 : 1,
                   }}
                 >
-                  <button className="xbtn" onClick={e => { e.stopPropagation(); handleDelete(p.id); }}>✕</button>
+                  <button className="xbtn" onClick={e => handleDelete(p.id, e)}>✕</button>
                   <span className="proj-brand-tag" style={{ ...parseStyle(bs) }}>{p.brand}</span>
                   <div className="proj-name">{p.name}</div>
                   <div className="proj-desc">{p.desc || '설명 없음'}</div>
