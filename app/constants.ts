@@ -66,7 +66,7 @@ export const TAB_TITLES: Record<string, string> = {
   influencer: 'Influencer & 공구',
   projects: 'Projects & Campaigns',
   calendar: 'Calendar',
-  settlement: 'Settlement & 매출',
+  settlement: 'Settlement & 발주',
   team: 'Team',
 };
 
@@ -75,6 +75,6 @@ export const TAB_SUBS: Record<string, string> = {
   influencer: '인플루언서 공동구매 관리',
   projects: '이너피움 · 아쿠아크 · 문화콘텐츠',
   calendar: '일정 및 스케줄 관리',
-  settlement: '매출 · 지출 · 정산 트래킹',
+  settlement: '발주 · 지출 · 정산 트래킹',
   team: '팀원 현황 및 업무 배분',
 };
