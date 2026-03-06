@@ -192,15 +192,6 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
                   <span className="proj-brand-tag" style={{ ...parseStyle(bs) }}>{p.brand}</span>
                   <div className="proj-name">{p.name}</div>
                   <div className="proj-desc">{p.desc || '설명 없음'}</div>
-                  <div className="pbar-wrap">
-                    <div className="pbar">
-                      <div className="pfill" style={{ width: `${p.progress}%`, background: PROJ_COLOR[p.status] }} />
-                    </div>
-                    <div className="plbl">
-                      <span>{p.progress}% 완료</span>
-                      <span>{p.due || '마감 미정'}</span>
-                    </div>
-                  </div>
                   <div className="proj-foot">
                     <span className={`status-pill ${ps.cls}`}>{ps.lbl}</span>
                     {p.start && (
@@ -279,6 +270,39 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
 
             <div style={{ width: '100%', height: 4, background: 'var(--surface3)', borderRadius: 4, marginBottom: 20 }}>
               <div style={{ height: '100%', borderRadius: 4, background: PROJ_COLOR[selectedProject.status], width: `${selectedProject.progress}%` }} />
+            </div>
+
+            {/* Status */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', marginBottom: 8, fontFamily: "'DM Mono', monospace", letterSpacing: 1 }}>
+                상태
+              </div>
+              <select
+                value={selectedProject.status}
+                onChange={e => {
+                  const updated = projects.map(p =>
+                    p.id === selectedProject.id ? { ...p, status: e.target.value as 'active' | 'hold' | 'done' } : p
+                  );
+                  setProjects(updated);
+                  setSelectedProject({ ...selectedProject, status: e.target.value as 'active' | 'hold' | 'done' });
+                }}
+                style={{
+                  width: '100%',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: '7px 10px',
+                  fontSize: 12,
+                  color: 'var(--text)',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="active">진행 중</option>
+                <option value="hold">보류</option>
+                <option value="done">완료</option>
+              </select>
             </div>
 
             {/* Notes */}
