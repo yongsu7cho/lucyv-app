@@ -10,6 +10,7 @@ import CalendarPage from './components/CalendarPage';
 import SettlementPage from './components/SettlementPage';
 import TeamPage from './components/TeamPage';
 import MemoPage from './components/MemoPage';
+import OrderPage from './components/OrderPage';
 import { supabase } from '../lib/supabase';
 import type {
   TabName, Influencer, Project, CalendarEventMap, CalendarEvent,
@@ -334,6 +335,7 @@ export default function Home() {
               setMemos={setMemos}
             />
           )}
+          {activeTab === 'orders' && <OrderPage />}
         </div>
       </div>
     </div>

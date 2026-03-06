@@ -68,6 +68,7 @@ export const TAB_TITLES: Record<string, string> = {
   calendar: 'Calendar',
   settlement: 'Settlement & 발주',
   team: 'Team',
+  orders: 'Orders & 발주',
 };
 
 export const TAB_SUBS: Record<string, string> = {
@@ -77,4 +78,5 @@ export const TAB_SUBS: Record<string, string> = {
   calendar: '일정 및 스케줄 관리',
   settlement: '발주 · 지출 · 정산 트래킹',
   team: '팀원 현황 및 업무 배분',
+  orders: '플랫폼 주문 → 발주서 자동 변환',
 };
