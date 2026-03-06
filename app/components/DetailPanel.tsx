@@ -76,61 +76,100 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
 
         {/* Body */}
         <div className="dp-body">
-          {/* Basic Info */}
-          <div className="dp-section">
-            <div className="dp-section-label">기본 정보</div>
-            {type === 'influencer' && <InfluencerFields inf={draft as Influencer} upd={upd} />}
-            {type === 'project' && <ProjectFields p={draft as Project} upd={upd} />}
-            {type === 'team' && <TeamFields m={draft as TeamMember} upd={upd} />}
-          </div>
-
-          {/* Notes */}
-          <div className="dp-section">
-            <div className="dp-section-label">노트 / 메모</div>
-            <textarea
-              className="dp-notes"
-              placeholder="자유롭게 메모를 입력하세요..."
-              value={notes}
-              onChange={e => upd('notes', e.target.value)}
-            />
-          </div>
-
-          {/* Action Items */}
-          <div className="dp-section">
-            <div className="dp-section-label">
-              액션 아이템
-              {actions.length > 0 && (
-                <span className="dp-action-count">
-                  {actions.filter(a => a.done).length}/{actions.length}
-                </span>
-              )}
-            </div>
-            {actions.length > 0 && (
-              <div className="dp-action-list">
-                {actions.map(a => (
-                  <div key={a.id} className="dp-action-row">
-                    <input
-                      type="checkbox"
-                      className="dp-action-check"
-                      checked={a.done}
-                      onChange={() => toggleAction(a.id)}
-                    />
-                    <input
-                      type="text"
-                      className={`dp-action-text${a.done ? ' done' : ''}`}
-                      placeholder="할 일 입력..."
-                      value={a.text}
-                      onChange={e => updateActionText(a.id, e.target.value)}
-                    />
-                    <button className="dp-action-del" onClick={() => removeAction(a.id)}>✕</button>
-                  </div>
-                ))}
+          {type === 'team' ? (
+            <>
+              {/* 상태 */}
+              <div className="dp-section">
+                <div className="dp-section-label">상태</div>
+                <TeamStatusField m={draft as TeamMember} upd={upd} />
               </div>
-            )}
-            <button className="dp-add-action-btn" onClick={addAction}>
-              + 액션 추가
-            </button>
-          </div>
+
+              {/* Notes */}
+              <div className="dp-section">
+                <div className="dp-section-label">노트 / 메모</div>
+                <textarea
+                  className="dp-notes"
+                  placeholder="자유롭게 메모를 입력하세요..."
+                  value={notes}
+                  onChange={e => upd('notes', e.target.value)}
+                />
+              </div>
+
+              {/* Action Items */}
+              <div className="dp-section">
+                <div className="dp-section-label">
+                  액션 아이템
+                  {actions.length > 0 && (
+                    <span className="dp-action-count">
+                      {actions.filter(a => a.done).length}/{actions.length}
+                    </span>
+                  )}
+                </div>
+                {actions.length > 0 && (
+                  <div className="dp-action-list">
+                    {actions.map(a => (
+                      <div key={a.id} className="dp-action-row">
+                        <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => toggleAction(a.id)} />
+                        <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => updateActionText(a.id, e.target.value)} />
+                        <button className="dp-action-del" onClick={() => removeAction(a.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
+              </div>
+
+              {/* 기본 정보 */}
+              <div className="dp-section">
+                <div className="dp-section-label">기본 정보</div>
+                <TeamFields m={draft as TeamMember} upd={upd} />
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Basic Info */}
+              <div className="dp-section">
+                <div className="dp-section-label">기본 정보</div>
+                {type === 'influencer' && <InfluencerFields inf={draft as Influencer} upd={upd} />}
+                {type === 'project' && <ProjectFields p={draft as Project} upd={upd} />}
+              </div>
+
+              {/* Notes */}
+              <div className="dp-section">
+                <div className="dp-section-label">노트 / 메모</div>
+                <textarea
+                  className="dp-notes"
+                  placeholder="자유롭게 메모를 입력하세요..."
+                  value={notes}
+                  onChange={e => upd('notes', e.target.value)}
+                />
+              </div>
+
+              {/* Action Items */}
+              <div className="dp-section">
+                <div className="dp-section-label">
+                  액션 아이템
+                  {actions.length > 0 && (
+                    <span className="dp-action-count">
+                      {actions.filter(a => a.done).length}/{actions.length}
+                    </span>
+                  )}
+                </div>
+                {actions.length > 0 && (
+                  <div className="dp-action-list">
+                    {actions.map(a => (
+                      <div key={a.id} className="dp-action-row">
+                        <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => toggleAction(a.id)} />
+                        <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => updateActionText(a.id, e.target.value)} />
+                        <button className="dp-action-del" onClick={() => removeAction(a.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -258,6 +297,21 @@ function ProjectFields({ p, upd }: { p: Project; upd: (f: string, v: unknown) =>
   );
 }
 
+function TeamStatusField({ m, upd }: { m: TeamMember; upd: (f: string, v: unknown) => void }) {
+  return (
+    <div className="dp-compact">
+      <div className="dp-cr">
+        <span className="dp-cl">상태</span>
+        <select className="dp-ci dp-ci-sel" value={m.status} onChange={e => upd('status', e.target.value as TeamStatus)}>
+          <option value="a">재직 중</option>
+          <option value="l">휴가 중</option>
+          <option value="w">외근 중</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function TeamFields({ m, upd }: { m: TeamMember; upd: (f: string, v: unknown) => void }) {
   const rows: { label: string; el: React.ReactNode }[] = [
     { label: '이름', el: <input className="dp-ci" value={m.name} onChange={e => upd('name', e.target.value)} /> },
@@ -265,13 +319,6 @@ function TeamFields({ m, upd }: { m: TeamMember; upd: (f: string, v: unknown) =>
     { label: '이메일', el: <input className="dp-ci" type="email" value={m.email} onChange={e => upd('email', e.target.value)} /> },
     { label: '연락처', el: <input className="dp-ci" value={m.phone} onChange={e => upd('phone', e.target.value)} /> },
     { label: '담당 업무', el: <input className="dp-ci" value={m.tags.join(', ')} placeholder="쉼표로 구분" onChange={e => upd('tags', e.target.value.split(',').map(t => t.trim()).filter(Boolean))} /> },
-    { label: '상태', el: (
-      <select className="dp-ci dp-ci-sel" value={m.status} onChange={e => upd('status', e.target.value as TeamStatus)}>
-        <option value="a">재직 중</option>
-        <option value="l">휴가 중</option>
-        <option value="w">외근 중</option>
-      </select>
-    )},
   ];
   return (
     <div className="dp-compact">
