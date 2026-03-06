@@ -9,6 +9,7 @@ interface SidebarProps {
 const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; badge?: boolean }[] = [
   { tab: 'dashboard', icon: '◈', label: '대시보드', section: 'Overview' },
   { tab: 'influencer', icon: '✦', label: '인플루언서/공구', section: 'Commerce', badge: true },
+  { tab: 'orders', icon: '📦', label: '발주서 관리' },
   { tab: 'settlement', icon: '₩', label: '정산/발주' },
   { tab: 'projects', icon: '◉', label: '프로젝트/캠페인', section: 'Brand' },
   { tab: 'calendar', icon: '◷', label: '일정/캘린더' },
