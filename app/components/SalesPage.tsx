@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -321,6 +322,7 @@ function dispCell(row: BrandSaleRow, col: ColDef): string {
 
 /* ─────────────────── Main Component ─────────────────── */
 export default function SalesPage() {
+  const now = new Date();
   const [tab, setTab] = useState<Brand>('innerpium');
   const [rows, setRows] = useState<BrandSaleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -330,6 +332,8 @@ export default function SalesPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filterYear, setFilterYear] = useState<string>(String(now.getFullYear()));
+  const [filterMonth, setFilterMonth] = useState<string>(String(now.getMonth() + 1).padStart(2, '0'));
 
   const fetchRows = useCallback(async (brand: Brand) => {
     setLoading(true);
@@ -411,27 +415,38 @@ export default function SalesPage() {
   const cols = tab === 'innerpium' ? INNERPIUM_COLS : AQUACRC_COLS;
   const groups = tab === 'innerpium' ? INNERPIUM_GROUPS : AQUACRC_GROUPS;
 
-  // KPI: current month rows
-  const now = new Date();
-  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthRows = rows.filter(r => r.date.startsWith(ym));
-  const kpiRows = monthRows.length > 0 ? monthRows : rows;
-  const kpiSub = monthRows.length > 0 ? `${now.getMonth() + 1}월 · ${monthRows.length}일` : `전체 ${rows.length}일`;
+  // Period filter
+  const availableYears = [...new Set(rows.map(r => r.date.slice(0, 4)))]
+    .sort().reverse();
+  const currentYearStr = String(now.getFullYear());
+  if (!availableYears.includes(currentYearStr)) availableYears.unshift(currentYearStr);
+
+  const filteredRows = rows.filter(r => {
+    if (filterYear && !r.date.startsWith(filterYear)) return false;
+    if (filterYear && filterMonth && !r.date.startsWith(`${filterYear}-${filterMonth}`)) return false;
+    return true;
+  });
+
+  const kpiSub = filterYear && filterMonth
+    ? `${filterYear}.${filterMonth} · ${filteredRows.length}일`
+    : filterYear
+    ? `${filterYear}년 · ${filteredRows.length}일`
+    : `전체 · ${filteredRows.length}일`;
 
   const sumField = (field: keyof BrandSaleRow) =>
-    kpiRows.reduce((s, r) => s + (Number(r[field]) || 0), 0);
+    filteredRows.reduce((s, r) => s + (Number(r[field]) || 0), 0);
 
   const totalRevenue = sumField('total_revenue');
   const storeFarm = sumField('store_farm');
   const cafe24Sum = sumField('cafe24');
   const purchases = sumField('purchase_count');
   const marketingSum = sumField('marketing_total');
-  const convRates = kpiRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
+  const convRates = filteredRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
   const avgConv = convRates.length > 0 ? convRates.reduce((a, b) => a + b, 0) / convRates.length : 0;
 
-  // Chart: ascending date
+  // Chart: ascending date (filtered)
   const barKeys = tab === 'innerpium' ? ['스토어팜', '카페24', '기타'] : ['스토어팜', '카페24', '신세계V', '기타(더블유)'];
-  const chartData = [...rows]
+  const chartData = [...filteredRows]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(r => {
       const base: Record<string, string | number> = {
@@ -445,11 +460,43 @@ export default function SalesPage() {
       return base;
     });
 
+  // Excel download
+  function handleDownload() {
+    if (filteredRows.length === 0) return;
+    const brandName = tab === 'innerpium' ? '이너피움' : '아쿠아크';
+    const period = filterYear && filterMonth
+      ? `${filterYear}_${filterMonth}`
+      : filterYear || currentYearStr;
+    const filename = `${brandName}_매출_${period}.xlsx`;
+
+    const headers = cols.map(c => c.label);
+    const dataRows = filteredRows
+      .slice()
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(row =>
+        cols.map(c => {
+          const v = row[c.field];
+          if (v == null) return '';
+          if (c.field === 'conversion_rate') return Number(v);
+          if (c.field === 'date') return String(v);
+          return Number(v);
+        })
+      );
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+    ws['!cols'] = cols.map(c => ({ wch: c.field === 'date' ? 12 : 14 }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, brandName);
+    XLSX.writeFile(wb, filename);
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── Header: tabs + new button ── */}
+      {/* ── Header: tabs + period filter + actions ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+        {/* Brand tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
           {(['innerpium', 'aquacrc'] as Brand[]).map(t => (
             <button
@@ -461,9 +508,58 @@ export default function SalesPage() {
             </button>
           ))}
         </div>
-        <button className="btn btn-rose" onClick={openCreate}>
-          + 오늘 매출 입력
-        </button>
+
+        {/* Period filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <select
+            className="input"
+            style={{ width: 90, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={filterYear}
+            onChange={e => setFilterYear(e.target.value)}
+          >
+            <option value="">전체</option>
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}년</option>
+            ))}
+          </select>
+          <select
+            className="input"
+            style={{ width: 76, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={filterMonth}
+            onChange={e => setFilterMonth(e.target.value)}
+            disabled={!filterYear}
+          >
+            <option value="">전체</option>
+            {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
+              <option key={m} value={m}>{Number(m)}월</option>
+            ))}
+          </select>
+          {(filterYear || filterMonth) && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 11, padding: '4px 8px', height: 32 }}
+              onClick={() => { setFilterYear(''); setFilterMonth(''); }}
+            >
+              전체
+            </button>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: 12 }}
+            onClick={handleDownload}
+            disabled={filteredRows.length === 0}
+            title={`${tab === 'innerpium' ? '이너피움' : '아쿠아크'}_매출_${filterYear || currentYearStr}${filterMonth ? '_' + filterMonth : ''}.xlsx`}
+          >
+            ↓ 엑셀 다운로드
+          </button>
+          <button className="btn btn-rose" onClick={openCreate}>
+            + 오늘 매출 입력
+          </button>
+        </div>
       </div>
 
       {/* ── Entry Form ── */}
@@ -539,7 +635,7 @@ export default function SalesPage() {
 
       {loading ? (
         <div className="empty"><p>불러오는 중…</p></div>
-      ) : rows.length === 0 ? (
+      ) : filteredRows.length === 0 && rows.length === 0 ? (
         <div className="empty" style={{ padding: '48px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>📈</div>
           <p>아직 입력된 매출 데이터가 없어요</p>
@@ -606,10 +702,15 @@ export default function SalesPage() {
             <div className="card-head">
               <div className="card-title">▤ 일별 데이터</div>
               <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono',monospace" }}>
-                {rows.length}행 · 최신순
+                {filteredRows.length}행 · 최신순
               </span>
             </div>
             <div className="card-body" style={{ padding: 0 }}>
+              {filteredRows.length === 0 ? (
+                <div className="empty" style={{ padding: '24px 0' }}>
+                  <p>해당 기간 데이터가 없어요</p>
+                </div>
+              ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
                   <thead>
@@ -635,7 +736,7 @@ export default function SalesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, ri) => (
+                    {filteredRows.map((row, ri) => (
                       <tr key={row.id} style={{
                         background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
                         borderTop: '1px solid var(--border)',
@@ -678,6 +779,7 @@ export default function SalesPage() {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           </div>
         </>
