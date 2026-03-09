@@ -4,4 +4,4 @@
   "outputDirectory": ".next",
   "installCommand": "npm install",
   "devCommand": "npm run dev"
-}
+ }

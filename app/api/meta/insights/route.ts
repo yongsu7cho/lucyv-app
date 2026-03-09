@@ -14,7 +14,7 @@ const PERIOD_PRESET: Record<string, string> = {
 };
 
 const CAMPAIGN_FIELDS = [
-  'campaign_name', 'status', 'budget_remaining',
+  'campaign_name',
   'impressions', 'reach', 'clicks', 'ctr', 'cpm', 'frequency',
   'spend', 'actions', 'cost_per_action_type', 'objective',
 ].join(',');
