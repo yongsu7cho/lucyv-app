@@ -1,5 +1,8 @@
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { BRAND_STYLE, CAT_COL, PROJ_COLOR, PROJ_STAT, INF_STAT_MAP, fmt, dk } from '../constants';
-import type { Influencer, Project, CalendarEventMap, Settlement, TeamMember, TabName } from '../types';
+import type { Influencer, Project, CalendarEventMap, Settlement, TeamMember } from '../types';
 
 interface DashboardProps {
   influencers: Influencer[];
@@ -243,6 +246,9 @@ export default function Dashboard({ influencers, projects, events, settlements, 
           </div>
         </div>
       </div>
+
+      {/* Sales Upload Section */}
+      <SalesUploadSection />
     </div>
   );
 }
@@ -289,6 +295,309 @@ function BrandRevenueChart({ settlements }: { settlements: import('../types').Se
           <div className="chart-bar-val">{fmt(d.total)}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ── Sales Upload Section ── */
+
+const LS_SALES = 'dashboard_sales_v1';
+
+interface ColDef { key: string; label: string; bold?: boolean; eventCount?: boolean; }
+type SaleRow = Record<string, string | number | null>;
+interface SalesStore { innerpium: SaleRow[]; aquacr: SaleRow[]; uploadedAt: string; }
+
+const INNERPIUM_COLS: ColDef[] = [
+  { key: '날짜', label: '날짜' },
+  { key: '스토어팜', label: '스토어팜' },
+  { key: '카페24', label: '카페24' },
+  { key: '기타', label: '기타' },
+  { key: '총매출', label: '총매출', bold: true },
+  { key: '유산균매출', label: '유산균매출' },
+  { key: '구매건', label: '구매건' },
+  { key: '유산균수량', label: '유산균수량' },
+  { key: 'EVENT', label: 'EVENT', eventCount: true },
+  { key: '설정금액', label: '설정금액' },
+  { key: '마케팅총금액비용', label: '마케팅총금액비용' },
+  { key: '유입(24)', label: '유입(24)' },
+  { key: '유입(N)', label: '유입(N)' },
+  { key: '유입비용', label: '유입비용' },
+  { key: '전환률', label: '전환률' },
+  { key: '회원가입', label: '회원가입' },
+  { key: '찜', label: '찜' },
+  { key: '카카오', label: '카카오' },
+  { key: '인스타', label: '인스타' },
+  { key: '인스타총', label: '인스타총' },
+];
+
+const AQUACR_COLS: ColDef[] = [
+  { key: '날짜', label: '날짜' },
+  { key: '스토어팜', label: '스토어팜' },
+  { key: '카페24', label: '카페24' },
+  { key: '신세계V', label: '신세계V' },
+  { key: '기타(더블유)', label: '기타(더블유)' },
+  { key: '총매출', label: '총매출', bold: true },
+  { key: '클렌저매출', label: '클렌저매출' },
+  { key: '구매건', label: '구매건' },
+  { key: '클렌저수량', label: '클렌저수량' },
+  { key: 'EVENT', label: 'EVENT', eventCount: true },
+  { key: '설정금액', label: '설정금액' },
+  { key: '마케팅총금액비용', label: '마케팅총금액비용' },
+  { key: '유입(24)', label: '유입(24)' },
+  { key: '유입(N)', label: '유입(N)' },
+  { key: '유입비용', label: '유입비용' },
+  { key: '전환률', label: '전환률' },
+  { key: '회원가입', label: '회원가입' },
+  { key: '찜', label: '찜' },
+  { key: '카카오', label: '카카오' },
+  { key: '인스타', label: '인스타' },
+  { key: '인스타총', label: '인스타총' },
+];
+
+// Parse an Excel sheet into SaleRow[], using the given ColDef keys
+function parseSheet(sheet: XLSX.WorkSheet, cols: ColDef[]): SaleRow[] {
+  const raw: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' });
+  if (raw.length < 2) return [];
+  const headers = raw[0].map(h => String(h).trim());
+  const colKeys = new Set(cols.map(c => c.key));
+
+  return raw.slice(1).map(row => {
+    const obj: SaleRow = {};
+    headers.forEach((h, i) => {
+      if (colKeys.has(h)) obj[h] = row[i] ?? null;
+    });
+    return obj;
+  });
+}
+
+// Parse a date string to Date (supports YYYY-MM-DD, YYYY/MM/DD, MM/DD/YYYY, etc.)
+function parseDate(val: string | number | null): Date | null {
+  if (!val) return null;
+  const s = String(val).trim();
+  // Try numeric Excel serial
+  const n = Number(s);
+  if (!isNaN(n) && n > 10000) {
+    const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Extract event count from EVENT cell value
+function eventCount(val: string | number | null): string {
+  if (val === null || val === '') return '-';
+  const n = Number(val);
+  if (!isNaN(n)) return String(n);
+  // count comma-separated non-empty items
+  const parts = String(val).split(',').filter(s => s.trim());
+  return parts.length > 0 ? String(parts.length) : '-';
+}
+
+// Filter to last 28 days & sort descending
+function filterSort(rows: SaleRow[]): SaleRow[] {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 28);
+  return rows
+    .filter(r => {
+      const d = parseDate(r['날짜'] as string);
+      return d && d >= cutoff;
+    })
+    .sort((a, b) => {
+      const da = parseDate(a['날짜'] as string);
+      const db = parseDate(b['날짜'] as string);
+      return (db?.getTime() ?? 0) - (da?.getTime() ?? 0);
+    });
+}
+
+function cellVal(row: SaleRow, col: ColDef): string {
+  const v = row[col.key];
+  if (col.eventCount) return eventCount(v as string | number | null);
+  if (v === null || v === undefined || v === '') return '-';
+  return String(v);
+}
+
+function SalesUploadSection() {
+  const [data, setData] = useState<SalesStore | null>(null);
+  const [tab, setTab] = useState<'innerpium' | 'aquacr'>('innerpium');
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LS_SALES);
+      if (saved) setData(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, []);
+
+  function handleFile(file: File) {
+    file.arrayBuffer().then(buf => {
+      const wb = XLSX.read(buf, { type: 'array' });
+      // Find sheets by name or index
+      const findSheet = (names: string[]) => {
+        for (const n of names) {
+          const s = wb.Sheets[n];
+          if (s) return s;
+        }
+        return wb.Sheets[wb.SheetNames[0]]; // fallback first sheet
+      };
+      const innerpiumSheet = findSheet(['이너피움', '이너피움 ', 'Sheet1']);
+      const aquacrSheet = findSheet(['아쿠아크', '아쿠아크 ', 'Sheet2']);
+
+      const innerpiumRows = parseSheet(innerpiumSheet ?? wb.Sheets[wb.SheetNames[0]], INNERPIUM_COLS);
+      const aquacrRows = wb.SheetNames.length > 1
+        ? parseSheet(aquacrSheet ?? wb.Sheets[wb.SheetNames[1]], AQUACR_COLS)
+        : [];
+
+      const store: SalesStore = {
+        innerpium: innerpiumRows,
+        aquacr: aquacrRows,
+        uploadedAt: new Date().toISOString(),
+      };
+      setData(store);
+      localStorage.setItem(LS_SALES, JSON.stringify(store));
+    });
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  }
+
+  const rows = data
+    ? filterSort(tab === 'innerpium' ? data.innerpium : data.aquacr)
+    : [];
+  const cols = tab === 'innerpium' ? INNERPIUM_COLS : AQUACR_COLS;
+  const uploadedAt = data?.uploadedAt
+    ? new Date(data.uploadedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div className="card">
+        <div className="card-head" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="card-title">▤ 매출 데이터 (최근 28일)</div>
+            {/* Brand tabs */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {(['innerpium', 'aquacr'] as const).map(t => (
+                <button
+                  key={t}
+                  className={`btn btn-sm ${tab === t ? 'btn-rose' : 'btn-ghost'}`}
+                  onClick={() => setTab(t)}
+                >
+                  {t === 'innerpium' ? '이너피움' : '아쿠아크'}
+                </button>
+              ))}
+            </div>
+            {uploadedAt && (
+              <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono',monospace" }}>
+                업로드: {uploadedAt}
+              </span>
+            )}
+          </div>
+          {/* Upload button */}
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ fontSize: 11 }}
+            onClick={() => inputRef.current?.click()}
+          >
+            ↑ Excel 업로드
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            style={{ display: 'none' }}
+            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
+          />
+        </div>
+
+        <div className="card-body" style={{ padding: 0 }}>
+          {!data ? (
+            /* Drop zone */
+            <div
+              style={{
+                margin: 16,
+                border: `2px dashed ${dragging ? 'var(--rose)' : 'var(--border)'}`,
+                borderRadius: 12,
+                padding: '32px 16px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'border-color 0.2s',
+              }}
+              onClick={() => inputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+            >
+              <div style={{ fontSize: 28, marginBottom: 8, color: 'var(--text3)' }}>▤</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>
+                이너피움 / 아쿠아크 매출 Excel 업로드
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                .xlsx 파일 · 시트1=이너피움, 시트2=아쿠아크
+              </div>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="empty" style={{ padding: '24px 0' }}>
+              <p>최근 28일 데이터가 없어요</p>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', borderRadius: '0 0 12px 12px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
+                <thead>
+                  <tr>
+                    {cols.map(c => (
+                      <th
+                        key={c.key}
+                        style={{
+                          padding: '8px 10px',
+                          textAlign: 'center',
+                          background: 'var(--surface2)',
+                          borderBottom: '2px solid var(--border)',
+                          color: c.bold ? 'var(--rose2)' : 'var(--text2)',
+                          fontWeight: c.bold ? 700 : 600,
+                          fontSize: 10,
+                          position: 'sticky',
+                          top: 0,
+                        }}
+                      >
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, ri) => (
+                    <tr key={ri} style={{ background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface2)', borderTop: '1px solid var(--border)' }}>
+                      {cols.map(c => {
+                        const v = cellVal(row, c);
+                        return (
+                          <td
+                            key={c.key}
+                            style={{
+                              padding: '7px 10px',
+                              textAlign: c.key === '날짜' ? 'left' : 'right',
+                              fontWeight: c.bold ? 700 : 400,
+                              color: c.bold ? 'var(--text)' : v === '-' ? 'var(--text3)' : 'var(--text)',
+                              fontFamily: c.key === '날짜' ? undefined : "'DM Mono', monospace",
+                            }}
+                          >
+                            {v}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
