@@ -12,6 +12,7 @@ import TeamPage from './components/TeamPage';
 import MemoPage from './components/MemoPage';
 import OrderPage from './components/OrderPage';
 import MetaPage from './components/MetaPage';
+import SalesPage from './components/SalesPage';
 import { supabase } from '../lib/supabase';
 import type {
   TabName, Influencer, Project, CalendarEventMap, CalendarEvent,
@@ -345,6 +346,7 @@ export default function Home() {
           )}
           {activeTab === 'orders' && <OrderPage />}
           {activeTab === 'meta' && <MetaPage />}
+          {activeTab === 'sales' && <SalesPage />}
         </div>
       </div>
     </div>
