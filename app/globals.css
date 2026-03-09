@@ -970,6 +970,11 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 .dp-notes:focus { border-color: var(--rose); }
 .dp-notes::placeholder { color: var(--text3); }
 .dp-action-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.dp-drag-handle {
+  font-size: 12px; letter-spacing: -1px; color: var(--text3); flex-shrink: 0;
+  user-select: none; line-height: 1; padding: 0 2px;
+}
+.dp-drag-over { outline: 2px solid var(--rose); outline-offset: -2px; }
 .dp-action-row {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 12px; border-radius: 8px; background: var(--surface2);

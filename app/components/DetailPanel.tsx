@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Influencer, Project, TeamMember, ActionItem, Brand, InfluencerStatus, ProjectStatus, TeamStatus } from '../types';
 
 type PanelItem = Influencer | Project | TeamMember;
@@ -35,17 +35,37 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     setDraft(prev => ({ ...prev, [field]: value }));
   }
 
+  // Sorted view: incomplete first, then complete (stable within each group)
+  const sortedActions = [
+    ...actions.filter(a => !a.done),
+    ...actions.filter(a => a.done),
+  ];
+
   function addAction() {
     upd('actions', [...actions, { id: Date.now(), text: '', done: false }]);
   }
   function toggleAction(id: number) {
-    upd('actions', actions.map(a => a.id === id ? { ...a, done: !a.done } : a));
+    const target = actions.find(a => a.id === id);
+    if (!target) return;
+    const toggled = { ...target, done: !target.done };
+    const rest = actions.filter(a => a.id !== id);
+    // completed → push to end; uncompleted → push to front of incomplete section
+    const newActions = toggled.done
+      ? [...rest, toggled]
+      : [toggled, ...rest];
+    upd('actions', newActions);
   }
   function updateActionText(id: number, text: string) {
     upd('actions', actions.map(a => a.id === id ? { ...a, text } : a));
   }
   function removeAction(id: number) {
     upd('actions', actions.filter(a => a.id !== id));
+  }
+  async function reorderActions(newActions: ActionItem[]) {
+    upd('actions', newActions);
+    // Immediately persist order to DB
+    const updated = { ...draft, actions: newActions } as PanelItem;
+    await onSave(updated);
   }
 
   async function handleSave() {
@@ -106,15 +126,13 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                   )}
                 </div>
                 {actions.length > 0 && (
-                  <div className="dp-action-list">
-                    {actions.map(a => (
-                      <div key={a.id} className="dp-action-row">
-                        <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => toggleAction(a.id)} />
-                        <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => updateActionText(a.id, e.target.value)} />
-                        <button className="dp-action-del" onClick={() => removeAction(a.id)}>✕</button>
-                      </div>
-                    ))}
-                  </div>
+                  <ActionList
+                    actions={sortedActions}
+                    onReorder={reorderActions}
+                    onToggle={toggleAction}
+                    onUpdateText={updateActionText}
+                    onRemove={removeAction}
+                  />
                 )}
                 <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
               </div>
@@ -156,15 +174,13 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                   )}
                 </div>
                 {actions.length > 0 && (
-                  <div className="dp-action-list">
-                    {actions.map(a => (
-                      <div key={a.id} className="dp-action-row">
-                        <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => toggleAction(a.id)} />
-                        <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => updateActionText(a.id, e.target.value)} />
-                        <button className="dp-action-del" onClick={() => removeAction(a.id)}>✕</button>
-                      </div>
-                    ))}
-                  </div>
+                  <ActionList
+                    actions={sortedActions}
+                    onReorder={reorderActions}
+                    onToggle={toggleAction}
+                    onUpdateText={updateActionText}
+                    onRemove={removeAction}
+                  />
                 )}
                 <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
               </div>
@@ -181,6 +197,82 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
         </div>
       </div>
     </>
+  );
+}
+
+/* ── ActionList with drag-and-drop ── */
+
+interface ActionListProps {
+  actions: ActionItem[];
+  onReorder: (newActions: ActionItem[]) => void;
+  onToggle: (id: number) => void;
+  onUpdateText: (id: number, text: string) => void;
+  onRemove: (id: number) => void;
+}
+
+function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: ActionListProps) {
+  const dragId = useRef<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
+
+  function handleDragStart(e: React.DragEvent, id: number) {
+    dragId.current = id;
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragOver(e: React.DragEvent, id: number, done: boolean) {
+    e.preventDefault();
+    if (done) return;
+    setOverId(id);
+  }
+
+  function handleDrop(e: React.DragEvent, targetId: number, done: boolean) {
+    e.preventDefault();
+    setOverId(null);
+    const fromId = dragId.current;
+    if (fromId === null || fromId === targetId || done) return;
+
+    const incomplete = actions.filter(a => !a.done);
+    const complete = actions.filter(a => a.done);
+
+    const fromIdx = incomplete.findIndex(a => a.id === fromId);
+    const toIdx = incomplete.findIndex(a => a.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const reordered = [...incomplete];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+
+    onReorder([...reordered, ...complete]);
+    dragId.current = null;
+  }
+
+  function handleDragEnd() {
+    setOverId(null);
+    dragId.current = null;
+  }
+
+  return (
+    <div className="dp-action-list">
+      {actions.map(a => (
+        <div
+          key={a.id}
+          className={`dp-action-row${overId === a.id ? ' dp-drag-over' : ''}`}
+          draggable={!a.done}
+          onDragStart={a.done ? undefined : e => handleDragStart(e, a.id)}
+          onDragOver={e => handleDragOver(e, a.id, a.done)}
+          onDrop={e => handleDrop(e, a.id, a.done)}
+          onDragEnd={handleDragEnd}
+        >
+          <span
+            className="dp-drag-handle"
+            style={{ cursor: a.done ? 'default' : 'grab', opacity: a.done ? 0.2 : 0.45 }}
+          >⋮⋮</span>
+          <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => onToggle(a.id)} />
+          <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => onUpdateText(a.id, e.target.value)} />
+          <button className="dp-action-del" onClick={() => onRemove(a.id)}>✕</button>
+        </div>
+      ))}
+    </div>
   );
 }
 
