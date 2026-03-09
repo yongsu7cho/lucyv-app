@@ -62,8 +62,14 @@ function getCostPerPurchase(cpa?: MetaAction[]): number {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: '진행 중', PAUSED: '일시정지', ARCHIVED: '보관됨',
+  ACTIVE: '활성', PAUSED: '중지', ARCHIVED: '종료',
   DELETED: '삭제됨', CAMPAIGN_PAUSED: '캠페인정지', ADSET_PAUSED: '광고세트정지',
+};
+
+const STATUS_STYLE: Record<string, { background: string; color: string }> = {
+  ACTIVE:   { background: 'rgba(43,158,148,0.15)',  color: '#2b9e94' },
+  PAUSED:   { background: 'rgba(150,150,160,0.15)', color: 'var(--text3)' },
+  ARCHIVED: { background: 'rgba(212,89,106,0.15)',  color: '#d4596a' },
 };
 
 const BRAND_TABS: { val: Brand; label: string }[] = [
@@ -267,8 +273,7 @@ export default function MetaPage() {
                           <td style={TD}>
                             <span style={{
                               padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600,
-                              background: c.status === 'ACTIVE' ? 'rgba(43,158,148,0.15)' : 'rgba(150,150,160,0.15)',
-                              color: c.status === 'ACTIVE' ? '#2b9e94' : 'var(--text3)',
+                              ...(STATUS_STYLE[c.status] ?? { background: 'rgba(150,150,160,0.15)', color: 'var(--text3)' }),
                             }}>
                               {STATUS_LABEL[c.status] ?? c.status}
                             </span>
