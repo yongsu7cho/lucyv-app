@@ -35,6 +35,10 @@ interface DailyRow {
 
 type Brand = 'all' | 'innerpium' | 'aquarc';
 type Period = 'today' | 'yesterday' | '7d' | '30d';
+type SortCol = 'campaign_name' | 'status' | 'impressions' | 'reach' | 'clicks' | 'ctr' | 'cpm' | 'frequency' | 'purchase_count' | 'roas' | 'spend';
+type SortDir = 'asc' | 'desc';
+
+const STATUS_ORDER: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
 
 /* ── Helpers ── */
 
@@ -110,6 +114,36 @@ export default function MetaPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [daily, setDaily] = useState<DailyRow[]>([]);
   const [fetched, setFetched] = useState(false);
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  function handleSort(col: SortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
+
+  function getSortValue(c: Campaign, col: SortCol): number | string {
+    switch (col) {
+      case 'campaign_name': return c.campaign_name ?? '';
+      case 'status': return STATUS_ORDER[c.status] ?? 99;
+      case 'impressions': return n(c.impressions);
+      case 'reach': return n(c.reach);
+      case 'clicks': return n(c.clicks);
+      case 'ctr': return n(c.ctr);
+      case 'cpm': return n(c.cpm);
+      case 'frequency': return n(c.frequency);
+      case 'purchase_count': return getPurchaseCount(c.actions);
+      case 'roas': { const sp = n(c.spend); const pv = getPurchaseValue(c.actions); return sp > 0 && pv > 0 ? pv / sp : 0; }
+      case 'spend': return n(c.spend);
+    }
+  }
+
+  const sortedCampaigns = sortCol === null ? campaigns : [...campaigns].sort((a, b) => {
+    const va = getSortValue(a, sortCol);
+    const vb = getSortValue(b, sortCol);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 
   async function load() {
     setLoading(true);
@@ -258,13 +292,34 @@ export default function MetaPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                   <thead>
                     <tr style={{ background: 'var(--surface3, var(--surface))' }}>
-                      {['캠페인명', '상태', '예산잔액', '노출', '도달', '클릭', 'CTR', 'CPM', '빈도', '결과수', '결과당비용', 'ROAS', '지출'].map(h => (
-                        <th key={h} style={TH}>{h}</th>
+                      {([
+                        { label: '캠페인명', col: 'campaign_name' as SortCol },
+                        { label: '상태',    col: 'status' as SortCol },
+                        { label: '예산잔액', col: null },
+                        { label: '노출',    col: 'impressions' as SortCol },
+                        { label: '도달',    col: 'reach' as SortCol },
+                        { label: '클릭',    col: 'clicks' as SortCol },
+                        { label: 'CTR',     col: 'ctr' as SortCol },
+                        { label: 'CPM',     col: 'cpm' as SortCol },
+                        { label: '빈도',    col: 'frequency' as SortCol },
+                        { label: '결과수',  col: 'purchase_count' as SortCol },
+                        { label: '결과당비용', col: null },
+                        { label: 'ROAS',    col: 'roas' as SortCol },
+                        { label: '지출',    col: 'spend' as SortCol },
+                      ] as { label: string; col: SortCol | null }[]).map(({ label, col }) => (
+                        <th
+                          key={label}
+                          style={{ ...TH, cursor: col ? 'pointer' : 'default', userSelect: 'none' }}
+                          onClick={() => col && handleSort(col)}
+                        >
+                          {label}
+                          {col && sortCol === col && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((c, i) => {
+                    {sortedCampaigns.map((c, i) => {
                       const spend = n(c.spend);
                       const purchaseVal = getPurchaseValue(c.actions);
                       const purchaseCnt = getPurchaseCount(c.actions);
