@@ -121,7 +121,9 @@ export default function MetaPage() {
       setCampaigns(data.campaigns ?? []);
       setDaily(data.daily ?? []);
       setFetched(true);
-      console.log('[MetaPage] 첫 번째 캠페인 status:', (data.campaigns ?? [])[0]?.status);
+      const camps = data.campaigns ?? [];
+      console.log('[MetaPage] campaigns 전체:', camps);
+      console.log('[MetaPage] status 목록:', camps.map((c: Campaign) => c.status));
     } catch (e) {
       setError(e instanceof Error ? e.message : '불러오기 실패');
     } finally {
