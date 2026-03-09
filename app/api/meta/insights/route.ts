@@ -22,6 +22,22 @@ const CAMPAIGN_FIELDS = [
 const DAILY_FIELDS = 'date_start,impressions,clicks,spend';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchCampaignStatus(accountId: string): Promise<any[]> {
+  const url = new URL(`https://graph.facebook.com/v20.0/${accountId}/campaigns`);
+  url.searchParams.set('access_token', TOKEN);
+  url.searchParams.set('fields', 'id,status,effective_status');
+  url.searchParams.set('limit', '100');
+
+  const res = await fetch(url.toString(), { next: { revalidate: 300 } });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err?.error?.message ?? `Meta API error ${res.status}`);
+  }
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchCampaignInsights(accountId: string, datePreset: string): Promise<any[]> {
   const url = new URL(`https://graph.facebook.com/v20.0/${accountId}/insights`);
   url.searchParams.set('access_token', TOKEN);
@@ -96,12 +112,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown brand' }, { status: 400 });
     }
 
-    const [campaignResults, dailyResults] = await Promise.all([
+    const [campaignResults, statusResults, dailyResults] = await Promise.all([
       Promise.all(accountIds.map(id => fetchCampaignInsights(id, datePreset))),
+      Promise.all(accountIds.map(id => fetchCampaignStatus(id))),
       Promise.all(accountIds.map(id => fetchDailyInsights(id, datePreset))),
     ]);
 
-    const campaigns = campaignResults.flat();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const statusMap = new Map<string, any>();
+    for (const row of statusResults.flat()) {
+      statusMap.set(row.id, row);
+    }
+
+    const campaigns = campaignResults.flat().map(insight => ({
+      ...insight,
+      status: statusMap.get(insight.campaign_id)?.effective_status ?? statusMap.get(insight.campaign_id)?.status ?? null,
+    }));
     const daily =
       dailyResults.length === 1
         ? (dailyResults[0] as object[]).map(r => r)
