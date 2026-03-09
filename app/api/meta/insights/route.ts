@@ -19,7 +19,7 @@ const CAMPAIGN_FIELDS = [
   'spend', 'actions', 'cost_per_action_type', 'objective',
 ].join(',');
 
-const DAILY_FIELDS = 'date_start,impressions,clicks,spend';
+const DAILY_FIELDS = 'date_start,impressions,clicks,spend,ctr';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function fetchCampaignStatus(accountId: string): Promise<any[]> {
@@ -88,7 +88,11 @@ function mergeDailyRows(a: any[], b: any[]): any[] {
     });
   }
   return Array.from(map.entries())
-    .map(([date_start, v]) => ({ date_start, ...v }))
+    .map(([date_start, v]) => ({
+      date_start,
+      ...v,
+      ctr: v.impressions > 0 ? (v.clicks / v.impressions) * 100 : 0,
+    }))
     .sort((a, b) => a.date_start.localeCompare(b.date_start));
 }
 

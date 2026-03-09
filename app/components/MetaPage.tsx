@@ -31,10 +31,15 @@ interface DailyRow {
   impressions: number;
   clicks: number;
   spend: number;
+  ctr?: number | string;
 }
 
 type Brand = 'all' | 'innerpium' | 'aquarc';
 type Period = 'today' | 'yesterday' | '7d' | '30d';
+type SortCol = 'campaign_name' | 'status' | 'impressions' | 'reach' | 'clicks' | 'ctr' | 'cpm' | 'frequency' | 'purchase_count' | 'roas' | 'spend';
+type SortDir = 'asc' | 'desc';
+
+const STATUS_ORDER: Record<string, number> = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
 
 /* ── Helpers ── */
 
@@ -110,6 +115,36 @@ export default function MetaPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [daily, setDaily] = useState<DailyRow[]>([]);
   const [fetched, setFetched] = useState(false);
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  function handleSort(col: SortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
+
+  function getSortValue(c: Campaign, col: SortCol): number | string {
+    switch (col) {
+      case 'campaign_name': return c.campaign_name ?? '';
+      case 'status': return STATUS_ORDER[c.status] ?? 99;
+      case 'impressions': return n(c.impressions);
+      case 'reach': return n(c.reach);
+      case 'clicks': return n(c.clicks);
+      case 'ctr': return n(c.ctr);
+      case 'cpm': return n(c.cpm);
+      case 'frequency': return n(c.frequency);
+      case 'purchase_count': return getPurchaseCount(c.actions);
+      case 'roas': { const sp = n(c.spend); const pv = getPurchaseValue(c.actions); return sp > 0 && pv > 0 ? pv / sp : 0; }
+      case 'spend': return n(c.spend);
+    }
+  }
+
+  const sortedCampaigns = sortCol === null ? campaigns : [...campaigns].sort((a, b) => {
+    const va = getSortValue(a, sortCol);
+    const vb = getSortValue(b, sortCol);
+    const cmp = typeof va === 'string' ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 
   async function load() {
     setLoading(true);
@@ -142,12 +177,18 @@ export default function MetaPage() {
   const roas = totalSpend > 0 ? totalPurchaseValue / totalSpend : 0;
 
   /* Chart data */
-  const chartData = daily.map(d => ({
-    date: d.date_start.slice(5), // MM-DD
-    '지출(₩)': Math.round(n(d.spend)),
-    '노출': n(d.impressions),
-    '클릭': n(d.clicks),
-  }));
+  const chartData = daily.map(d => {
+    const clicks = n(d.clicks);
+    const spend = Math.round(n(d.spend));
+    return {
+      date: d.date_start.slice(5), // MM-DD
+      '지출(₩)': spend,
+      '노출': n(d.impressions),
+      '클릭': clicks,
+      'CTR(%)': Number(Number(d.ctr ?? 0).toFixed(2)),
+      'CPC(₩)': clicks > 0 ? Math.round(n(d.spend) / clicks) : 0,
+    };
+  });
 
   return (
     <div className="fade-in" style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -202,7 +243,7 @@ export default function MetaPage() {
       {fetched && (
         <>
           {/* KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 24 }}>
+          <div className="meta-kpi-grid">
             <KpiCard label="총 지출" value={money(totalSpend)} />
             <KpiCard label="노출" value={fmt(totalImpressions)} />
             <KpiCard label="도달" value={fmt(totalReach)} />
@@ -218,19 +259,21 @@ export default function MetaPage() {
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', fontFamily: "'DM Mono', monospace", letterSpacing: 1, marginBottom: 16 }}>
                 일별 추이
               </div>
-              <ResponsiveContainer width="100%" height={240}>
-                <ComposedChart data={chartData} margin={{ top: 0, right: 10, bottom: 0, left: 10 }}>
+              <ResponsiveContainer width="100%" height={260}>
+                <ComposedChart data={chartData} margin={{ top: 0, right: 60, bottom: 0, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} />
                   <YAxis yAxisId="left" tick={{ fontSize: 10, fill: 'var(--text3)' }} width={60} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'var(--text3)' }} width={50} tickFormatter={v => `₩${(v/1000).toFixed(0)}K`} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'var(--text3)' }} width={55} tickFormatter={v => `₩${(v/1000).toFixed(0)}K`} />
+                  <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10, fill: 'var(--text3)' }} width={40} tickFormatter={v => `${v.toFixed(1)}%`} hide />
                   <Tooltip
                     contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     formatter={(value: any, name: any) => {
                       const v = Number(value ?? 0);
                       const label = String(name ?? '');
-                      if (label === '지출(₩)') return [`₩${v.toLocaleString()}`, label] as [string, string];
+                      if (label === '지출(₩)' || label === 'CPC(₩)') return [`₩${v.toLocaleString()}`, label] as [string, string];
+                      if (label === 'CTR(%)') return [`${v.toFixed(2)}%`, label] as [string, string];
                       return [v.toLocaleString(), label] as [string, string];
                     }}
                   />
@@ -238,6 +281,8 @@ export default function MetaPage() {
                   <Bar yAxisId="left" dataKey="노출" fill="rgba(43,158,148,0.25)" radius={[3, 3, 0, 0]} />
                   <Bar yAxisId="left" dataKey="클릭" fill="rgba(123,111,212,0.4)" radius={[3, 3, 0, 0]} />
                   <Line yAxisId="right" type="monotone" dataKey="지출(₩)" stroke="#d4596a" strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="CPC(₩)" stroke="#e8a838" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                  <Line yAxisId="pct" type="monotone" dataKey="CTR(%)" stroke="#7b6fd4" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -254,17 +299,37 @@ export default function MetaPage() {
             {campaigns.length === 0 ? (
               <div style={{ padding: '32px', textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>데이터 없음</div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div className="meta-table-wrap" style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                   <thead>
                     <tr style={{ background: 'var(--surface3, var(--surface))' }}>
-                      {['캠페인명', '상태', '예산잔액', '노출', '도달', '클릭', 'CTR', 'CPM', '빈도', '결과수', '결과당비용', 'ROAS', '지출'].map(h => (
-                        <th key={h} style={TH}>{h}</th>
+                      {([
+                        { label: '캠페인명', col: 'campaign_name' as SortCol },
+                        { label: '상태',    col: 'status' as SortCol },
+                        { label: '노출',    col: 'impressions' as SortCol },
+                        { label: '도달',    col: 'reach' as SortCol },
+                        { label: '클릭',    col: 'clicks' as SortCol },
+                        { label: 'CTR',     col: 'ctr' as SortCol },
+                        { label: 'CPM',     col: 'cpm' as SortCol },
+                        { label: '빈도',    col: 'frequency' as SortCol },
+                        { label: '결과수',  col: 'purchase_count' as SortCol },
+                        { label: '결과당비용', col: null },
+                        { label: 'ROAS',    col: 'roas' as SortCol },
+                        { label: '지출',    col: 'spend' as SortCol },
+                      ] as { label: string; col: SortCol | null }[]).map(({ label, col }) => (
+                        <th
+                          key={label}
+                          style={{ ...TH, cursor: col ? 'pointer' : 'default', userSelect: 'none' }}
+                          onClick={() => col && handleSort(col)}
+                        >
+                          {label}
+                          {col && sortCol === col && (sortDir === 'asc' ? ' ▲' : ' ▼')}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((c, i) => {
+                    {sortedCampaigns.map((c, i) => {
                       const spend = n(c.spend);
                       const purchaseVal = getPurchaseValue(c.actions);
                       const purchaseCnt = getPurchaseCount(c.actions);
@@ -276,7 +341,6 @@ export default function MetaPage() {
                           <td style={{ ...TD, fontWeight: 600, ...(STATUS_STYLE[c.status] ?? { color: 'var(--text3)' }) }}>
                             {STATUS_LABEL[c.status] ?? c.status}
                           </td>
-                          <td style={TD}>{c.budget_remaining ? money(n(c.budget_remaining)) : '-'}</td>
                           <td style={TD}>{fmt(n(c.impressions))}</td>
                           <td style={TD}>{fmt(n(c.reach))}</td>
                           <td style={TD}>{fmt(n(c.clicks))}</td>
@@ -293,7 +357,6 @@ export default function MetaPage() {
                     {/* Total row */}
                     <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)', fontWeight: 700 }}>
                       <td style={{ ...TD, fontWeight: 700 }}>합계</td>
-                      <td style={TD} />
                       <td style={TD} />
                       <td style={TD}>{fmt(totalImpressions)}</td>
                       <td style={TD}>{fmt(totalReach)}</td>

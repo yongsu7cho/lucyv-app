@@ -1,6 +1,7 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import XLSXStyle from 'xlsx-js-style';
 
 type Platform = '카페24' | '스마트스토어' | '쿠팡' | '신세계V' | '무신사';
 
@@ -45,6 +46,7 @@ function g(raw: RawRow, key: string): string {
 
 function mapRow(platform: Platform, raw: RawRow): OrderRow {
   const row = baseRow();
+  row.기타 = platform;
   if (platform === '카페24') {
     row.받는사람 = g(raw, '수령인');
     row.받는사람전화번호 = g(raw, '수령인 휴대전화');
@@ -52,7 +54,7 @@ function mapRow(platform: Platform, raw: RawRow): OrderRow {
     row.우편 = g(raw, '수령인 우편번호');
     row.받는사람주소 = g(raw, '수령인 주소(전체)');
     row.수량 = g(raw, '수량');
-    row.품목명 = g(raw, '주문상품명');
+    row.품목명 = g(raw, '주문상품명(옵션포함)');
     row.고객주문번호 = g(raw, '주문번호');
     row.배송메모 = g(raw, '배송메시지');
   } else if (platform === '스마트스토어') {
@@ -62,7 +64,7 @@ function mapRow(platform: Platform, raw: RawRow): OrderRow {
     row.우편 = g(raw, '우편번호');
     row.받는사람주소 = g(raw, '통합배송지');
     row.수량 = g(raw, '수량');
-    row.품목명 = g(raw, '상품명');
+    row.품목명 = g(raw, '옵션정보') || g(raw, '상품명');
     row.고객주문번호 = g(raw, '주문번호');
     row.배송메모 = g(raw, '배송메세지');
   } else if (platform === '쿠팡') {
@@ -189,6 +191,10 @@ const TD: React.CSSProperties = {
   borderRight: '1px solid var(--border)',
 };
 
+/* ── localStorage keys ── */
+const LS_ENTRIES = 'order_entries_v1';
+const LS_LAST_DL = 'order_last_download_v1';
+
 /* ── Component ── */
 
 export default function OrderPage() {
@@ -197,6 +203,24 @@ export default function OrderPage() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lastDownload, setLastDownload] = useState<string | null>(null);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LS_ENTRIES);
+      if (saved) setEntries(JSON.parse(saved) as AccumulatedEntry[]);
+      const dl = localStorage.getItem(LS_LAST_DL);
+      if (dl) setLastDownload(dl);
+    } catch { /* ignore corrupt data */ }
+  }, []);
+
+  // Persist entries to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_ENTRIES, JSON.stringify(entries));
+    } catch { /* storage full */ }
+  }, [entries]);
 
   const allRows = entries.flatMap(e => e.rows);
 
@@ -267,15 +291,39 @@ export default function OrderPage() {
     e.target.value = '';
   }
 
+  // Columns that get yellow (FFFF00) header background — matches the original template
+  const YELLOW_HEADERS = new Set([
+    '보내시는분', '보내시는분전화번호', '보내는사람주소',
+    '받는사람', '받는사람전화번호', '받는사람핸드폰',
+    '우편', '받는사람주소', '수량', '품목명', '배송메모',
+  ]);
+
   function downloadAll() {
     if (allRows.length === 0) return;
-    const rowsWithPlatform = entries.flatMap(e =>
-      e.rows.map(r => ({ 플랫폼: e.platform, ...r }))
-    );
-    const ws = XLSX.utils.json_to_sheet(rowsWithPlatform, { header: ['플랫폼', ...ORDER_COLUMNS] });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '발주서');
-    XLSX.writeFile(wb, `발주서_전체_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const headers = [...ORDER_COLUMNS] as string[];
+    const dataRows = entries.flatMap(e => e.rows.map(r => headers.map(h => r[h as typeof ORDER_COLUMNS[number]] ?? '')));
+
+    // Build AOA (array-of-arrays): header row + data rows
+    const aoa = [headers, ...dataRows];
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+
+    // Apply yellow fill to designated header cells
+    headers.forEach((h, colIdx) => {
+      const cellAddr = XLSXStyle.utils.encode_cell({ r: 0, c: colIdx });
+      const cell = ws[cellAddr];
+      if (!cell) return;
+      cell.s = YELLOW_HEADERS.has(h)
+        ? { fill: { patternType: 'solid', fgColor: { rgb: 'FFFF00' } }, font: { bold: true } }
+        : { font: { bold: true } };
+    });
+
+    const wb = XLSXStyle.utils.book_new();
+    XLSXStyle.utils.book_append_sheet(wb, ws, '발주서');
+    XLSXStyle.writeFile(wb, `발주서_전체_${new Date().toISOString().slice(0, 10)}.xlsx`);
+
+    const ts = new Date().toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    setLastDownload(ts);
+    localStorage.setItem(LS_LAST_DL, ts);
   }
 
   function removeEntry(idx: number) {
@@ -309,8 +357,13 @@ export default function OrderPage() {
               </span>
             </>
           )}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEntries([]); setError(''); }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            {lastDownload && (
+              <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
+                마지막 다운로드 {lastDownload}
+              </span>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={() => { setEntries([]); setError(''); localStorage.removeItem(LS_ENTRIES); }}>
               초기화
             </button>
             <button className="btn btn-rose btn-sm" onClick={downloadAll}>
