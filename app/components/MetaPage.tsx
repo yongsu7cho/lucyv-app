@@ -243,7 +243,7 @@ export default function MetaPage() {
       {fetched && (
         <>
           {/* KPI Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 24 }}>
+          <div className="meta-kpi-grid">
             <KpiCard label="총 지출" value={money(totalSpend)} />
             <KpiCard label="노출" value={fmt(totalImpressions)} />
             <KpiCard label="도달" value={fmt(totalReach)} />
@@ -299,7 +299,7 @@ export default function MetaPage() {
             {campaigns.length === 0 ? (
               <div style={{ padding: '32px', textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>데이터 없음</div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
+              <div className="meta-table-wrap" style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                   <thead>
                     <tr style={{ background: 'var(--surface3, var(--surface))' }}>
