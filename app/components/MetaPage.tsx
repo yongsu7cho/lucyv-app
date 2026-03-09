@@ -121,6 +121,7 @@ export default function MetaPage() {
       setCampaigns(data.campaigns ?? []);
       setDaily(data.daily ?? []);
       setFetched(true);
+      console.log('[MetaPage] 첫 번째 캠페인 status:', (data.campaigns ?? [])[0]?.status);
     } catch (e) {
       setError(e instanceof Error ? e.message : '불러오기 실패');
     } finally {
@@ -270,13 +271,8 @@ export default function MetaPage() {
                       return (
                         <tr key={i} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)' }}>
                           <td style={{ ...TD, maxWidth: 200, fontWeight: 500 }}>{c.campaign_name}</td>
-                          <td style={TD}>
-                            <span style={{
-                              padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600,
-                              ...(STATUS_STYLE[c.status] ?? { background: 'rgba(150,150,160,0.15)', color: 'var(--text3)' }),
-                            }}>
-                              {STATUS_LABEL[c.status] ?? c.status}
-                            </span>
+                          <td style={{ ...TD, fontWeight: 600, ...(STATUS_STYLE[c.status] ?? { color: 'var(--text3)' }) }}>
+                            {STATUS_LABEL[c.status] ?? c.status}
                           </td>
                           <td style={TD}>{c.budget_remaining ? money(n(c.budget_remaining)) : '-'}</td>
                           <td style={TD}>{fmt(n(c.impressions))}</td>
