@@ -312,13 +312,7 @@ function InfluencerFields({ inf, upd }: { inf: Influencer; upd: (f: string, v: u
           <input className="input" value={inf.tags.join(', ')} placeholder="쉼표 구분" onChange={e => upd('tags', e.target.value.split(',').map(t => t.trim()).filter(Boolean))} />
         </Fld>
         <Fld label="연결 브랜드">
-          <select className="input" value={inf.brand} onChange={e => upd('brand', e.target.value as Brand)}>
-            <option value="이너피움">이너피움</option>
-            <option value="아쿠아크">아쿠아크</option>
-            <option value="문화콘텐츠">문화콘텐츠</option>
-            <option value="공구">공동구매</option>
-            <option value="기타">기타</option>
-          </select>
+          <input className="input" value={inf.brand} placeholder="브랜드명 직접 입력" onChange={e => upd('brand', e.target.value)} />
         </Fld>
       </div>
       <div style={G2}>

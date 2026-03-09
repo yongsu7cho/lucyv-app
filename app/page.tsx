@@ -153,6 +153,7 @@ async function syncCalendarEvents(oldMap: CalendarEventMap, newMap: CalendarEven
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('dashboard');
   const [mounted, setMounted] = useState(false);
+  const [openInfluencerId, setOpenInfluencerId] = useState<number | null>(null);
 
   const [influencers, setInfluencersState] = useState<Influencer[]>([]);
   const [projects, setProjectsState] = useState<Project[]>([]);
@@ -298,12 +299,18 @@ export default function Home() {
               events={events}
               settlements={settlements}
               members={members}
+              onInfluencerClick={(id) => {
+                setOpenInfluencerId(id);
+                setActiveTab('influencer');
+              }}
             />
           )}
           {activeTab === 'influencer' && (
             <InfluencerPage
               influencers={influencers}
               setInfluencers={setInfluencers}
+              openId={openInfluencerId}
+              onOpened={() => setOpenInfluencerId(null)}
             />
           )}
           {activeTab === 'projects' && (

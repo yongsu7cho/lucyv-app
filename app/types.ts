@@ -19,7 +19,7 @@ export interface Influencer {
   followers: string;
   count: number;
   tags: string[];
-  brand: Brand;
+  brand: string;
   start: string;
   end: string;
   status: InfluencerStatus;

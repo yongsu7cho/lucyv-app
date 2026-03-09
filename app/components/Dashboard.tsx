@@ -1,5 +1,5 @@
-import { BRAND_STYLE, CAT_COL, PROJ_COLOR, fmt, dk } from '../constants';
-import type { Influencer, Project, CalendarEventMap, Settlement, TeamMember } from '../types';
+import { BRAND_STYLE, CAT_COL, PROJ_COLOR, PROJ_STAT, INF_STAT_MAP, fmt, dk } from '../constants';
+import type { Influencer, Project, CalendarEventMap, Settlement, TeamMember, TabName } from '../types';
 
 interface DashboardProps {
   influencers: Influencer[];
@@ -7,15 +7,22 @@ interface DashboardProps {
   events: CalendarEventMap;
   settlements: Settlement[];
   members: TeamMember[];
+  onInfluencerClick?: (id: number) => void;
 }
 
-export default function Dashboard({ influencers, projects, events, settlements, members }: DashboardProps) {
+export default function Dashboard({ influencers, projects, events, settlements, members, onInfluencerClick }: DashboardProps) {
   const today = dk(new Date());
   const activeInfs = influencers.filter(i => i.status === 'active');
   const totalRevenue = settlements.filter(s => s.type === 'in').reduce((a, s) => a + s.amount, 0);
+  const totalOut = settlements.filter(s => s.type === 'out').reduce((a, s) => a + s.amount, 0);
   const activeProjects = projects.filter(p => p.status === 'active').length;
   const activeMembers = members.filter(m => m.status === 'a').length;
-  const todayEvents = events[today] || [];
+
+  // Today's calendar events
+  const calEvents = events[today] || [];
+
+  // Influencers whose공구 starts or ends today
+  const infEventsToday = influencers.filter(i => i.start === today || i.end === today);
 
   const monthlyIn = settlements
     .filter(s => {
@@ -23,6 +30,8 @@ export default function Dashboard({ influencers, projects, events, settlements, 
       return s.type === 'in' && s.date.startsWith(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
     })
     .reduce((a, s) => a + s.amount, 0);
+
+  const recentSettlements = settlements.slice(0, 5);
 
   return (
     <div className="fade-in">
@@ -66,21 +75,45 @@ export default function Dashboard({ influencers, projects, events, settlements, 
                 <p>진행 중인 공구가 없어요</p>
               </div>
             ) : (
-              activeInfs.slice(0, 5).map(inf => (
-                <div key={inf.id} className="recent-row">
-                  <div className="r-dot" style={{ background: inf.color }} />
-                  <div className="r-text">
-                    {inf.name}{' '}
-                    <span style={{ fontSize: 11, color: 'var(--text3)' }}>{inf.handle}</span>
-                  </div>
-                  <span
-                    className="r-tag"
-                    style={{ ...parseStyle(BRAND_STYLE[inf.brand] || BRAND_STYLE['기타']) }}
+              activeInfs.slice(0, 5).map(inf => {
+                const st = INF_STAT_MAP[inf.status];
+                return (
+                  <div
+                    key={inf.id}
+                    className="recent-row"
+                    style={{ cursor: onInfluencerClick ? 'pointer' : undefined, flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}
+                    onClick={() => onInfluencerClick?.(inf.id)}
                   >
-                    {inf.brand}
-                  </span>
-                </div>
-              ))
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                      <div className="r-dot" style={{ background: inf.color, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{inf.name}</span>
+                        {inf.handle && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 5 }}>{inf.handle}</span>}
+                      </div>
+                      <span className={`inf-status ${st.cls}`} style={{ fontSize: 9, padding: '2px 6px', flexShrink: 0 }}>
+                        <div className="sdot" />{st.lbl}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 18, width: '100%', flexWrap: 'wrap' }}>
+                      {inf.brand && (
+                        <span className="brand-tag" style={{ ...parseStyle(BRAND_STYLE[inf.brand] || BRAND_STYLE['기타']), fontSize: 10 }}>
+                          {inf.brand}
+                        </span>
+                      )}
+                      {(inf.start || inf.end) && (
+                        <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
+                          {inf.start || '?'} ~ {inf.end || '?'}
+                        </span>
+                      )}
+                      {inf.notes && (
+                        <span style={{ fontSize: 10, color: 'var(--text3)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {inf.notes}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -91,27 +124,43 @@ export default function Dashboard({ influencers, projects, events, settlements, 
             <div className="card-title">◷ 오늘 일정</div>
           </div>
           <div className="card-body">
-            {todayEvents.length === 0 ? (
+            {calEvents.length === 0 && infEventsToday.length === 0 ? (
               <div className="empty" style={{ padding: '20px 0' }}>
                 <div className="empty-icon" style={{ fontSize: 24 }}>◷</div>
                 <p>오늘 일정이 없어요</p>
               </div>
             ) : (
-              todayEvents.map(ev => (
-                <div key={ev.id} className="recent-row">
-                  <div className="r-dot" style={{ background: CAT_COL[ev.cat] || 'var(--rose)' }} />
-                  <div className="r-text">{ev.title}</div>
-                  <span className="r-meta">{ev.time || '미정'}</span>
-                </div>
-              ))
+              <>
+                {calEvents.map(ev => (
+                  <div key={ev.id} className="recent-row">
+                    <div className="r-dot" style={{ background: CAT_COL[ev.cat] || 'var(--rose)' }} />
+                    <div className="r-text">{ev.title}</div>
+                    <span className="r-meta">{ev.time || '미정'}</span>
+                  </div>
+                ))}
+                {infEventsToday.map(inf => (
+                  <div
+                    key={`inf-${inf.id}`}
+                    className="recent-row"
+                    style={{ cursor: onInfluencerClick ? 'pointer' : undefined }}
+                    onClick={() => onInfluencerClick?.(inf.id)}
+                  >
+                    <div className="r-dot" style={{ background: inf.color }} />
+                    <div className="r-text" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {inf.name} 공구 {inf.start === today ? '시작' : '종료'}
+                    </div>
+                    <span className="r-meta">공구</span>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </div>
 
-        {/* Revenue Summary */}
+        {/* Settlement Summary */}
         <div className="card">
           <div className="card-head">
-            <div className="card-title">₩ 매출 현황</div>
+            <div className="card-title">₩ 발주·정산 현황</div>
           </div>
           <div className="card-body">
             {settlements.length === 0 ? (
@@ -121,23 +170,22 @@ export default function Dashboard({ influencers, projects, events, settlements, 
               </div>
             ) : (
               <>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <RevenueRow
-                    label="총 매출"
-                    value={fmt(settlements.filter(s => s.type === 'in').reduce((a, s) => a + s.amount, 0))}
-                    color="var(--success)"
-                  />
-                  <RevenueRow
-                    label="총 지출"
-                    value={fmt(settlements.filter(s => s.type === 'out').reduce((a, s) => a + s.amount, 0))}
-                    color="var(--danger)"
-                  />
-                  <RevenueRow
-                    label="순수익"
-                    value={fmt(totalRevenue - settlements.filter(s => s.type === 'out').reduce((a, s) => a + s.amount, 0))}
-                    color="var(--rose2)"
-                    bold
-                  />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                  <RevenueRow label="총 매출" value={fmt(totalRevenue)} color="var(--success)" />
+                  <RevenueRow label="총 지출" value={fmt(totalOut)} color="var(--danger)" />
+                  <RevenueRow label="순수익" value={fmt(totalRevenue - totalOut)} color="var(--rose2)" bold />
+                </div>
+                <div className="sec-ttl" style={{ marginBottom: 8 }}>최근 정산 내역</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {recentSettlements.map(s => (
+                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: s.type === 'in' ? 'var(--success)' : 'var(--danger)', display: 'inline-block' }} />
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text2)' }}>{s.name}</span>
+                      <span style={{ fontFamily: "'DM Mono',monospace", color: s.type === 'in' ? 'var(--success)' : 'var(--danger)', flexShrink: 0 }}>
+                        {s.type === 'in' ? '+' : '-'}{fmt(s.amount)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <div className="sec-ttl">브랜드별 매출</div>
@@ -162,31 +210,31 @@ export default function Dashboard({ influencers, projects, events, settlements, 
             ) : (
               projects.slice(0, 4).map(p => {
                 const bs = BRAND_STYLE[p.brand] || BRAND_STYLE['기타'];
+                const stat = PROJ_STAT[p.status];
+                const doneActions = p.actions.filter(a => a.done).length;
                 return (
                   <div
                     key={p.id}
-                    style={{
-                      background: 'var(--surface2)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 10,
-                      padding: 14,
-                    }}
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, padding: 14 }}
                   >
-                    <span
-                      className="brand-tag"
-                      style={{ ...parseStyle(bs), marginBottom: 8, display: 'inline-block' }}
-                    >
-                      {p.brand}
-                    </span>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>{p.name}</div>
-                    <div className="pbar">
-                      <div
-                        className="pfill"
-                        style={{ width: `${p.progress}%`, background: PROJ_COLOR[p.status] }}
-                      />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span className="brand-tag" style={{ ...parseStyle(bs) }}>{p.brand}</span>
+                      <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 10, background: `${PROJ_COLOR[p.status]}18`, color: PROJ_COLOR[p.status], fontWeight: 600 }}>
+                        {stat?.lbl ?? p.status}
+                      </span>
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace", marginTop: 4 }}>
-                      {p.progress}%
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{p.name}</div>
+                    {p.notes && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {p.notes}
+                      </div>
+                    )}
+                    <div className="pbar" style={{ marginBottom: 4 }}>
+                      <div className="pfill" style={{ width: `${p.progress}%`, background: PROJ_COLOR[p.status] }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
+                      <span>{p.progress}%</span>
+                      {p.actions.length > 0 && <span>액션 {doneActions}/{p.actions.length}</span>}
                     </div>
                   </div>
                 );
@@ -245,7 +293,6 @@ function BrandRevenueChart({ settlements }: { settlements: import('../types').Se
   );
 }
 
-// Helper to convert CSS string to style object
 function parseStyle(css: string): React.CSSProperties {
   const result: Record<string, string> = {};
   css.split(';').forEach(rule => {
