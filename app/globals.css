@@ -897,7 +897,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   top: 0;
   right: 0;
   height: 100vh;
-  width: 420px;
+  width: 55vw;
+  min-width: 380px;
   background: var(--bg);
   border-left: 1px solid var(--border);
   box-shadow: -6px 0 32px rgba(0,0,0,0.1);
@@ -970,6 +971,11 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 .dp-notes:focus { border-color: var(--rose); }
 .dp-notes::placeholder { color: var(--text3); }
 .dp-action-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.dp-drag-handle {
+  font-size: 12px; letter-spacing: -1px; color: var(--text3); flex-shrink: 0;
+  user-select: none; line-height: 1; padding: 0 2px;
+}
+.dp-drag-over { outline: 2px solid var(--rose); outline-offset: -2px; }
 .dp-action-row {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 12px; border-radius: 8px; background: var(--surface2);

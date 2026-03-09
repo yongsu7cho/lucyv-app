@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AVCOL, BRAND_STYLE, INF_STAT_MAP } from '../constants';
 import type { Influencer } from '../types';
 import DetailPanel from './DetailPanel';
@@ -7,18 +7,29 @@ import DetailPanel from './DetailPanel';
 interface InfluencerPageProps {
   influencers: Influencer[];
   setInfluencers: (infs: Influencer[]) => void;
+  openId?: number | null;
+  onOpened?: () => void;
 }
 
 const EMPTY_FORM = {
   name: '', handle: '', followers: '', count: 0, tags: '',
-  brand: '이너피움' as const, start: '', end: '', status: 'active' as const,
+  brand: '', start: '', end: '', status: 'active' as const,
 };
 
-export default function InfluencerPage({ influencers, setInfluencers }: InfluencerPageProps) {
+export default function InfluencerPage({ influencers, setInfluencers, openId, onOpened }: InfluencerPageProps) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [filter, setFilter] = useState<'all' | 'active' | 'standby' | 'end'>('all');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  // Open specific influencer from external navigation (e.g. Dashboard click)
+  useEffect(() => {
+    if (openId != null) {
+      setSelectedId(openId);
+      onOpened?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
   const selectedInf = selectedId != null ? influencers.find(i => i.id === selectedId) ?? null : null;
 
   const INF_ORDER: Record<string, number> = { active: 0, standby: 1, end: 2 };
@@ -34,7 +45,7 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
       followers: form.followers,
       count: form.count,
       tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-      brand: form.brand,
+      brand: form.brand || '기타',
       start: form.start,
       end: form.end,
       status: form.status,
@@ -181,14 +192,8 @@ export default function InfluencerPage({ influencers, setInfluencers }: Influenc
           </div>
           <div className="form-row">
             <div className="form-lbl">연결 브랜드</div>
-            <select className="input" value={form.brand}
-              onChange={e => setForm({ ...form, brand: e.target.value as typeof form.brand })}>
-              <option value="이너피움">이너피움 (건기식)</option>
-              <option value="아쿠아크">아쿠아크 (스킨케어)</option>
-              <option value="문화콘텐츠">문화/콘텐츠</option>
-              <option value="공구">공동구매</option>
-              <option value="기타">기타</option>
-            </select>
+            <input className="input" placeholder="브랜드명 직접 입력" value={form.brand}
+              onChange={e => setForm({ ...form, brand: e.target.value })} />
           </div>
           <div className="form-row">
             <div className="form-lbl">상태</div>

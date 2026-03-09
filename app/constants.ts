@@ -2,7 +2,7 @@ import { Brand, EventCategory, ProjectStatus, InfluencerStatus, TeamStatus } fro
 
 export const AVCOL = ['#d4596a', '#b8832a', '#2b9e94', '#7b6fd4', '#c94444', '#2b88b8'];
 
-export const BRAND_STYLE: Record<Brand, string> = {
+export const BRAND_STYLE: Record<string, string> = {
   '이너피움': 'background:rgba(43,158,148,.12);color:#2b9e94;',
   '아쿠아크': 'background:rgba(212,89,106,.12);color:#d4596a;',
   '문화콘텐츠': 'background:rgba(123,111,212,.12);color:#7b6fd4;',

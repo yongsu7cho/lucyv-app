@@ -3,9 +3,9 @@ import { useState, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import XLSXStyle from 'xlsx-js-style';
 
-type Platform = '카페24' | '스마트스토어' | '쿠팡' | '신세계V' | '무신사';
+type Platform = '카페24' | '스마트스토어' | '쿠팡' | '신세계V' | '무신사' | 'W컨셉';
 
-const PLATFORMS: Platform[] = ['카페24', '스마트스토어', '쿠팡', '신세계V', '무신사'];
+const PLATFORMS: Platform[] = ['카페24', '스마트스토어', '쿠팡', '신세계V', '무신사', 'W컨셉'];
 
 const FIXED = {
   보내시는분: '㈜루씨베이전씨',
@@ -99,6 +99,16 @@ function mapRow(platform: Platform, raw: RawRow): OrderRow {
     row.품목명 = prodNo ? `[${prodNo}]${prodName}` : prodName;
     row.고객주문번호 = g(raw, '주문번호');
     row.배송메모 = g(raw, '출고메시지');
+  } else if (platform === 'W컨셉') {
+    row.받는사람 = g(raw, '수취인');
+    row.받는사람전화번호 = g(raw, '수취인연락처1');
+    row.받는사람핸드폰 = g(raw, '수취인연락처2') || g(raw, '수취인연락처1');
+    row.우편 = g(raw, '수취인우편번호');
+    row.받는사람주소 = g(raw, '배송지');
+    row.수량 = g(raw, '수량');
+    row.품목명 = g(raw, '옵션1') || g(raw, '상품명');
+    row.고객주문번호 = g(raw, '주문번호');
+    row.배송메모 = g(raw, '배송메모');
   }
   return row;
 }
@@ -165,6 +175,7 @@ const ACCEPTS: Record<Platform, string> = {
   '쿠팡': '.xlsx,.xls',
   '신세계V': '.xlsx,.xls',
   '무신사': '.xls',
+  'W컨셉': '.xlsx,.xls',
 };
 
 const FILE_HINT: Record<Platform, string> = {
@@ -173,6 +184,7 @@ const FILE_HINT: Record<Platform, string> = {
   '쿠팡': 'XLSX · XLS',
   '신세계V': 'XLSX · XLS',
   '무신사': 'XLS (HTML 형식)',
+  'W컨셉': 'XLSX · XLS',
 };
 
 const PREVIEW_COLS: typeof ORDER_COLUMNS[number][] = [
