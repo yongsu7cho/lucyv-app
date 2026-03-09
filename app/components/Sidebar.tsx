@@ -12,6 +12,7 @@ const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; 
   { tab: 'dashboard', icon: '◈', label: '대시보드', section: 'Overview' },
   { tab: 'influencer', icon: '✦', label: '인플루언서/공구', section: 'Commerce', badge: true },
   { tab: 'orders', icon: '◈', label: '발주서 관리', section: 'Commerce' },
+  { tab: 'sales', icon: '📈', label: '브랜드 매출', section: 'Commerce' },
   { tab: 'settlement', icon: '₩', label: '정산/발주' },
   { tab: 'projects', icon: '◉', label: '프로젝트/캠페인', section: 'Brand' },
   { tab: 'meta', icon: '◈', label: '메타 광고' },
