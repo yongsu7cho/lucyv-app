@@ -250,16 +250,18 @@ export default function SalesPage() {
     return true;
   });
 
-  // KPI
-  const sumField = (f: keyof BrandSaleRow) => displayRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
-  const totalRevenue = sumField('total_revenue');
-  const storeFarm    = sumField('store_farm');
-  const cafe24Sum    = sumField('cafe24');
-  const purchases    = sumField('purchase_count');
-  const marketingSum = sumField('marketing_total');
-  const convRates    = displayRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
+  // KPI — 이번달
+  const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthRows  = rows.filter(r => r.date.startsWith(currentMonthPrefix));
+  const sumMonth   = (f: keyof BrandSaleRow) => monthRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
+  const totalRevenue = sumMonth('total_revenue');
+  const storeFarm    = sumMonth('store_farm');
+  const cafe24Sum    = sumMonth('cafe24');
+  const purchases    = sumMonth('purchase_count');
+  const marketingSum = sumMonth('marketing_total');
+  const convRates    = monthRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
   const avgConv      = convRates.length > 0 ? convRates.reduce((a, b) => a + b) / convRates.length : 0;
-  const kpiSub       = `최근 ${displayRows.length}일`;
+  const kpiSub       = `${now.getMonth() + 1}월 (${monthRows.length}일)`;
 
   // Chart
   const barKeys   = tab === 'innerpium' ? ['스토어팜', '카페24', '기타'] : ['스토어팜', '카페24', '신세계V', '기타(더블유)'];
@@ -497,10 +499,10 @@ export default function SalesPage() {
 
             {/* KPI Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              <KpiCard label="총매출 (30일)" value={money(totalRevenue)} sub={kpiSub} accent="var(--rose2)" />
+              <KpiCard label="이번달 총매출" value={money(totalRevenue)} sub={kpiSub} accent="var(--rose2)" />
               <KpiCard label="스토어팜"      value={money(storeFarm)}    sub={kpiSub} />
               <KpiCard label="카페24"        value={money(cafe24Sum)}    sub={kpiSub} />
-              <KpiCard label="총 구매건"     value={`${purchases.toLocaleString('ko-KR')}건`} sub={kpiSub} />
+              <KpiCard label="구매건"        value={`${purchases.toLocaleString('ko-KR')}건`} sub={kpiSub} />
               <KpiCard label="마케팅 비용"   value={money(marketingSum)} sub={kpiSub} />
               <KpiCard label="평균 전환률"   value={pctStr(avgConv)}     sub={kpiSub} />
             </div>
