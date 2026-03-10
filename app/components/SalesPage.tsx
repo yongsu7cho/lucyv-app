@@ -258,6 +258,7 @@ export default function SalesPage() {
   const [savingRows,  setSavingRows]  = useState<Set<number>>(new Set());
   const inputRef      = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
+  const calcRef       = useRef<HTMLDivElement>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
@@ -368,27 +369,16 @@ export default function SalesPage() {
   // 월별 요약
   const monthlySummary = buildMonthlySummary(rows);
 
-  // 분석: 마케팅비율 추이 — allRows(필터 전 전체)로 월별 직접 집계
-  // 이렇게 해야 storefarm/cafe24/total_sales가 없는 날의 마케팅비도 포함됨
-  const mktRatioChartData = (() => {
-    const map = new Map<string, { mkt: number; sales: number }>();
-    for (const r of allRows) {
-      const month = r.date.slice(0, 7);
-      if (!map.has(month)) map.set(month, { mkt: 0, sales: 0 });
-      const s = map.get(month)!;
-      s.mkt   += r.marketing_total || 0;
-      s.sales += r.total_sales     || 0;
-    }
-    return [...map.entries()]
-      .filter(([, s]) => s.sales > 0)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, s]) => ({
-        month:           month.slice(5) + '월',
-        '마케팅비율(%)': Number((s.mkt / s.sales * 100).toFixed(1)),
-        total_sales:     s.sales,
-        marketing_total: s.mkt,
-      }));
-  })();
+  // 분석: 마케팅비율 추이 — monthlySummary와 완전히 동일한 소스 사용
+  const mktRatioChartData = [...monthlySummary]
+    .filter(s => s.total_sales > 0)
+    .reverse()
+    .map(s => ({
+      month:           s.month.slice(5) + '월',
+      '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
+      total_sales:     s.total_sales,
+      marketing_total: s.marketing_total,
+    }));
 
   // 분석: 선택한 월 채널 파이 (null → 0 처리, 채널 합계 기준으로 비율 계산)
   const pieChannelTotal = (kpiStorefarm || 0) + (kpiCafe24 || 0) + (kpiEtc || 0);
@@ -522,6 +512,20 @@ export default function SalesPage() {
     }
     if (calcShowResult) { setCalcExpr(CALC_OPS.has(btn) ? calcResult + btn : btn); setCalcShowResult(false); return; }
     setCalcExpr(p => p + btn);
+  }
+
+  function handleCalcKeyDown(e: React.KeyboardEvent) {
+    const key = e.key;
+    if (key >= '0' && key <= '9')            { e.preventDefault(); calcPress(key); return; }
+    if (key === '.')                          { e.preventDefault(); calcPress('.'); return; }
+    if (key === '+')                          { e.preventDefault(); calcPress('+'); return; }
+    if (key === '-')                          { e.preventDefault(); calcPress('-'); return; }
+    if (key === '*')                          { e.preventDefault(); calcPress('×'); return; }
+    if (key === '/')                          { e.preventDefault(); calcPress('÷'); return; }
+    if (key === '(' || key === ')')           { e.preventDefault(); calcPress(key); return; }
+    if (key === 'Enter')                      { e.preventDefault(); calcPress('='); return; }
+    if (key === 'Backspace')                  { e.preventDefault(); calcPress('←'); return; }
+    if (key === 'Escape' || key === 'Delete') { e.preventDefault(); calcPress('C'); return; }
   }
 
   const calcDisplay = calcShowResult ? calcResult : (calcExpr || '0');
@@ -692,7 +696,7 @@ export default function SalesPage() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
                       <thead>
                         <tr>
-                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅비용', '마케팅비율(%)', '순이익'].map(h => (
+                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅비용', '마케팅비율(%)', ...(tab === 'innerpium' ? ['순이익'] : [])].map(h => (
                             <th key={h} style={{
                               padding: '8px 12px', textAlign: h === '월' ? 'left' : 'right',
                               background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
@@ -727,10 +731,12 @@ export default function SalesPage() {
                               color: s.total_sales > 0 ? mktRatioColor(s.mktRatio) : 'var(--text3)' }}>
                               {s.total_sales > 0 ? pctStr(s.mktRatio, 1) : '-'}
                             </td>
-                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, fontFamily: "'DM Mono',monospace",
-                              color: s.net_profit >= 0 ? '#10b981' : '#f43f5e' }}>
-                              {s.net_profit.toLocaleString('ko-KR')}
-                            </td>
+                            {tab === 'innerpium' && (
+                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, fontFamily: "'DM Mono',monospace",
+                                color: s.net_profit >= 0 ? '#10b981' : '#f43f5e' }}>
+                                {s.net_profit.toLocaleString('ko-KR')}
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -741,7 +747,7 @@ export default function SalesPage() {
             )}
 
             {/* 분석 섹션 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: tab === 'innerpium' ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12 }}>
 
               {/* 마케팅비율 월별 라인차트 */}
               <div className="card">
@@ -783,7 +789,9 @@ export default function SalesPage() {
                       <ResponsiveContainer width="100%" height={110}>
                         <PieChart>
                           <Pie data={pieData} cx="50%" cy="50%" outerRadius={46} dataKey="value"
-                            label={({ name, value }) => pieChannelTotal > 0 ? `${name} ${((value / pieChannelTotal) * 100).toFixed(0)}%` : name}
+                            label={({ percent }: { percent?: number }) =>
+                              (percent ?? 0) >= 0.05 ? `${((percent ?? 0) * 100).toFixed(0)}%` : ''
+                            }
                             labelLine={false}
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             style={{ fontSize: 9 } as any}>
@@ -813,8 +821,8 @@ export default function SalesPage() {
                 </div>
               </div>
 
-              {/* 월별 순이익 표 */}
-              <div className="card">
+              {/* 월별 순이익 표 — 이너피움만 */}
+              {tab === 'innerpium' && <div className="card">
                 <div className="card-head">
                   <div className="card-title">▤ 월별 순이익</div>
                 </div>
@@ -850,7 +858,7 @@ export default function SalesPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div>}
             </div>
 
             {/* 일별 데이터 테이블 */}
@@ -965,9 +973,13 @@ export default function SalesPage() {
               </div>
             </div>
 
-            <div className="card">
+            <div className="card" ref={calcRef} tabIndex={0}
+              onClick={() => calcRef.current?.focus()}
+              onKeyDown={handleCalcKeyDown}
+              style={{ outline: 'none' }}>
               <div className="card-head">
                 <div className="card-title" style={{ fontSize: 12 }}>⊞ 계산기</div>
+                <span style={{ fontSize: 9, color: 'var(--text3)' }}>클릭 후 키보드 입력 가능</span>
               </div>
               <div className="card-body" style={{ padding: '8px 10px' }}>
                 <div style={{

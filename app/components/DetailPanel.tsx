@@ -213,16 +213,25 @@ interface ActionListProps {
 function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: ActionListProps) {
   const dragId = useRef<number | null>(null);
   const [overId, setOverId] = useState<number | null>(null);
+  const [draggingId, setDraggingId] = useState<number | null>(null);
 
   function handleDragStart(e: React.DragEvent, id: number) {
     dragId.current = id;
+    setDraggingId(id);
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function handleDragOver(e: React.DragEvent, id: number, done: boolean) {
     e.preventDefault();
-    if (done) return;
+    if (done || id === dragId.current) return;
     setOverId(id);
+  }
+
+  function handleDragLeave(e: React.DragEvent, id: number) {
+    // Only clear overId if leaving to outside the list (not to a child element)
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setOverId(prev => prev === id ? null : prev);
+    }
   }
 
   function handleDrop(e: React.DragEvent, targetId: number, done: boolean) {
@@ -244,10 +253,12 @@ function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: Ac
 
     onReorder([...reordered, ...complete]);
     dragId.current = null;
+    setDraggingId(null);
   }
 
   function handleDragEnd() {
     setOverId(null);
+    setDraggingId(null);
     dragId.current = null;
   }
 
@@ -256,16 +267,21 @@ function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: Ac
       {actions.map(a => (
         <div
           key={a.id}
-          className={`dp-action-row${overId === a.id ? ' dp-drag-over' : ''}`}
+          className={[
+            'dp-action-row',
+            draggingId === a.id ? 'dp-dragging' : '',
+            overId === a.id ? 'dp-drag-over' : '',
+          ].filter(Boolean).join(' ')}
           draggable={!a.done}
           onDragStart={a.done ? undefined : e => handleDragStart(e, a.id)}
           onDragOver={e => handleDragOver(e, a.id, a.done)}
+          onDragLeave={e => handleDragLeave(e, a.id)}
           onDrop={e => handleDrop(e, a.id, a.done)}
           onDragEnd={handleDragEnd}
         >
           <span
             className="dp-drag-handle"
-            style={{ cursor: a.done ? 'default' : 'grab', opacity: a.done ? 0.2 : 0.45 }}
+            style={{ cursor: a.done ? 'default' : 'grab', opacity: a.done ? 0.2 : 0.5 }}
           >⋮⋮</span>
           <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => onToggle(a.id)} />
           <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => onUpdateText(a.id, e.target.value)} />
