@@ -62,25 +62,27 @@ export function dk(d: Date): string {
 }
 
 export const TAB_TITLES: Record<string, string> = {
-  dashboard: 'Dashboard',
+  dashboard:  'Dashboard',
   influencer: 'Influencer & 공구',
-  projects: 'Projects & Campaigns',
-  calendar: 'Calendar',
+  orders:     'Orders & 발주',
   settlement: 'Settlement & 발주',
-  team: 'Team',
-  orders: 'Orders & 발주',
-  meta: 'Meta 광고 분석',
-  sales: 'Brand Sales',
+  sales:      'Brand Sales',
+  meta:       'Meta 광고 분석',
+  projects:   'Projects & Campaigns',
+  personal:   'Schedule & 개인 노트',
+  team:       'Team',
+  memo:       'Memo',
 };
 
 export const TAB_SUBS: Record<string, string> = {
-  dashboard: '루씨 · 오늘 현황',
+  dashboard:  '루씨 · 오늘 현황',
   influencer: '인플루언서 공동구매 관리',
-  projects: '이너피움 · 아쿠아크 · 문화콘텐츠',
-  calendar: '일정 및 스케줄 관리',
+  orders:     '플랫폼 주문 → 발주서 자동 변환',
   settlement: '발주 · 지출 · 정산 트래킹',
-  team: '팀원 현황 및 업무 배분',
-  orders: '플랫폼 주문 → 발주서 자동 변환',
-  meta: '이너피움 · 아쿠아크 캠페인 성과',
-  sales: '이너피움 · 아쿠아크 일일 매출 현황',
+  sales:      '이너피움 · 아쿠아크 일일 매출 현황',
+  meta:       '이너피움 · 아쿠아크 캠페인 성과',
+  projects:   '이너피움 · 아쿠아크 · 문화콘텐츠',
+  personal:   '구글 캘린더 · 날짜별 개인 메모',
+  team:       '팀원 현황 및 업무 배분',
+  memo:       '자유 메모장',
 };
