@@ -369,27 +369,16 @@ export default function SalesPage() {
   // 월별 요약
   const monthlySummary = buildMonthlySummary(rows);
 
-  // 분석: 마케팅비율 추이 — allRows(필터 전 전체)로 월별 직접 집계
-  // 이렇게 해야 storefarm/cafe24/total_sales가 없는 날의 마케팅비도 포함됨
-  const mktRatioChartData = (() => {
-    const map = new Map<string, { mkt: number; sales: number }>();
-    for (const r of allRows) {
-      const month = r.date.slice(0, 7);
-      if (!map.has(month)) map.set(month, { mkt: 0, sales: 0 });
-      const s = map.get(month)!;
-      s.mkt   += r.marketing_total || 0;
-      s.sales += r.total_sales     || 0;
-    }
-    return [...map.entries()]
-      .filter(([, s]) => s.sales > 0)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, s]) => ({
-        month:           month.slice(5) + '월',
-        '마케팅비율(%)': Number((s.mkt / s.sales * 100).toFixed(1)),
-        total_sales:     s.sales,
-        marketing_total: s.mkt,
-      }));
-  })();
+  // 분석: 마케팅비율 추이 — monthlySummary와 완전히 동일한 소스 사용
+  const mktRatioChartData = [...monthlySummary]
+    .filter(s => s.total_sales > 0)
+    .reverse()
+    .map(s => ({
+      month:           s.month.slice(5) + '월',
+      '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
+      total_sales:     s.total_sales,
+      marketing_total: s.marketing_total,
+    }));
 
   // 분석: 선택한 월 채널 파이 (null → 0 처리, 채널 합계 기준으로 비율 계산)
   const pieChannelTotal = (kpiStorefarm || 0) + (kpiCafe24 || 0) + (kpiEtc || 0);
