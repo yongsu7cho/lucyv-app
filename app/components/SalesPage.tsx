@@ -202,9 +202,29 @@ function buildMonthlySummary(rows: BrandSaleRow[]): MonthSummary[] {
   const result = [...map.values()].sort((a, b) => b.month.localeCompare(a.month));
   for (const s of result) {
     s.mktRatio  = s.total_sales > 0 ? s.marketing_total / s.total_sales * 100 : 0;
-    s.net_profit = s.total_sales - s.marketing_total - (s.purchase_count * 4000) - (s.main_product_qty * 11000);
+    s.net_profit = s.total_sales - s.marketing_total - (s.purchase_count * 4500) - (s.main_product_qty * 11495);
   }
   return result;
+}
+
+/* ─────────────────── Custom Tooltips ─────────────────── */
+interface MktRatioPayload {
+  month: string;
+  '마케팅비율(%)': number;
+  total_sales: number;
+  marketing_total: number;
+}
+function MktRatioTooltip({ active, payload }: { active?: boolean; payload?: { payload: MktRatioPayload }[] }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 11 }}>
+      <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text)' }}>{d.month}</div>
+      <div style={{ color: '#f43f5e', fontWeight: 700 }}>마케팅비율: {d['마케팅비율(%)'].toFixed(1)}%</div>
+      <div style={{ color: 'var(--text2)', marginTop: 2 }}>총매출: ₩{d.total_sales.toLocaleString('ko-KR')}</div>
+      <div style={{ color: 'var(--text2)' }}>마케팅비용: ₩{d.marketing_total.toLocaleString('ko-KR')}</div>
+    </div>
+  );
 }
 
 /* ─────────────────── Calculator helpers ─────────────────── */
@@ -340,19 +360,23 @@ export default function SalesPage() {
   const monthlySummary = buildMonthlySummary(rows);
 
   // 분석: 마케팅비율 추이 — 월별 누적, total_sales > 0인 월만
+  // 툴팁과 그래프 점 모두 동일한 값 사용 (한 곳에서 계산)
   const mktRatioChartData = [...monthlySummary]
     .filter(s => s.total_sales > 0)
     .reverse()
     .map(s => ({
-      month: s.month.slice(5) + '월',
-      '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
+      month:            s.month.slice(5) + '월',
+      '마케팅비율(%)':  Number((s.marketing_total / s.total_sales * 100).toFixed(1)),
+      total_sales:      s.total_sales,
+      marketing_total:  s.marketing_total,
     }));
 
-  // 분석: 선택한 월 채널 파이
+  // 분석: 선택한 월 채널 파이 (null → 0 처리, 채널 합계 기준으로 비율 계산)
+  const pieChannelTotal = (kpiStorefarm || 0) + (kpiCafe24 || 0) + (kpiEtc || 0);
   const pieData = [
-    { name: '스토어팜', value: kpiStorefarm },
-    { name: '카페24',   value: kpiCafe24 },
-    { name: '기타',     value: kpiEtc },
+    { name: '스토어팜', value: kpiStorefarm || 0 },
+    { name: '카페24',   value: kpiCafe24   || 0 },
+    { name: '기타',     value: kpiEtc      || 0 },
   ].filter(d => d.value > 0);
 
   // 일별 차트
@@ -642,7 +666,7 @@ export default function SalesPage() {
               <div className="card">
                 <div className="card-head">
                   <div className="card-title">▤ 월별 요약</div>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>최근 6개월 · 순이익 = 총매출 - 마케팅 - 구매건×4,000 - 수량×11,000</span>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>최근 6개월 · 순이익 = 총매출 - 마케팅 - 구매건×4,500 - 수량×11,495</span>
                 </div>
                 <div className="card-body" style={{ padding: 0 }}>
                   <div style={{ overflowX: 'auto' }}>
@@ -711,10 +735,8 @@ export default function SalesPage() {
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
-                        tickFormatter={v => `${v}%`} domain={[0, 'auto']} width={28} />
-                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        formatter={(v: any) => [`${v}%`, '마케팅비율']} />
+                        tickFormatter={v => `${v}%`} domain={[0, 100]} width={32} />
+                      <Tooltip content={<MktRatioTooltip />} />
                       <Line type="monotone" dataKey="마케팅비율(%)" stroke="#f43f5e" strokeWidth={2} dot={{ r: 2, fill: '#f43f5e' }} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -741,7 +763,7 @@ export default function SalesPage() {
                       <ResponsiveContainer width="100%" height={110}>
                         <PieChart>
                           <Pie data={pieData} cx="50%" cy="50%" outerRadius={46} dataKey="value"
-                            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                            label={({ name, value }) => pieChannelTotal > 0 ? `${name} ${((value / pieChannelTotal) * 100).toFixed(0)}%` : name}
                             labelLine={false}
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             style={{ fontSize: 9 } as any}>
