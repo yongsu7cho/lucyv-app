@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, LineChart,
 } from 'recharts';
 import { supabase } from '../../lib/supabase';
 
@@ -27,7 +28,7 @@ interface BrandSaleRow {
   inflow_24: number | null;
   inflow_n: number | null;
   inflow_cost: number | null;       // auto: marketing_total / (inflow_24 + inflow_n)
-  conversion_rate: number | null;   // auto: purchase_count / inflow_24 * 100
+  conversion_rate: number | null;   // auto: purchase_count / (inflow_24 + inflow_n) * 100
   signup: number | null;
   wishlist: number | null;
   kakao: number | null;
@@ -36,13 +37,23 @@ interface BrandSaleRow {
   created_at?: string;
 }
 
+interface MonthSummary {
+  month: string;
+  total_sales: number;
+  storefarm: number;
+  cafe24: number;
+  etc: number;
+  marketing_total: number;
+  mktRatio: number;
+}
+
 /* ─────────────────── Column Definitions ─────────────────── */
 interface ColDef {
   field: keyof BrandSaleRow;
   label: string;
   bold?: boolean;
-  auto?: boolean;   // auto-calculated, read-only
-  noEdit?: boolean; // not inline-editable
+  auto?: boolean;
+  noEdit?: boolean;
 }
 
 const INNERPIUM_COLS: ColDef[] = [
@@ -94,10 +105,11 @@ const AQUACRC_COLS: ColDef[] = [
 /* ─────────────────── Helpers ─────────────────── */
 const CHART_COLORS: Record<string, string> = {
   스토어팜: '#10b981',
-  카페24: '#3b82f6',
-  기타: '#94a3b8',
-  총매출: '#f43f5e',
+  카페24:   '#3b82f6',
+  기타:     '#94a3b8',
+  총매출:   '#f43f5e',
 };
+const PIE_COLORS = ['#10b981', '#3b82f6', '#94a3b8'];
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -108,16 +120,18 @@ function toNum(s: string): number | null {
   return isNaN(n) ? null : n;
 }
 
-function money(v: number | null): string {
-  if (!v) return '₩0';
-  if (v >= 100_000_000) return `₩${(v / 100_000_000).toFixed(1)}억`;
-  if (v >= 1_000_000)   return `₩${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000)       return `₩${(v / 1_000).toFixed(0)}K`;
-  return `₩${v.toLocaleString('ko-KR')}`;
+/** 전체 숫자 표시 (축약 없음) */
+function numFmt(v: number | null): string {
+  if (v == null || v === 0) return '0';
+  return v.toLocaleString('ko-KR');
 }
 
-function pctStr(v: number): string {
-  return isNaN(v) || !isFinite(v) ? '-' : `${v.toFixed(1)}%`;
+function wonFmt(v: number | null): string {
+  return `₩${numFmt(v)}`;
+}
+
+function pctStr(v: number, digits = 1): string {
+  return isNaN(v) || !isFinite(v) ? '-' : `${v.toFixed(digits)}%`;
 }
 
 function fmtDate(s: string): string {
@@ -125,10 +139,14 @@ function fmtDate(s: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function mktRatioColor(pct: number): string {
+  if (pct <= 30) return '#10b981';
+  if (pct <= 50) return '#f59e0b';
+  return '#f43f5e';
+}
+
 function isEmptyRow(r: BrandSaleRow): boolean {
-  const noChannels = !r.storefarm && !r.cafe24 && !r.etc;
-  const noTotal    = !r.total_sales || r.total_sales === 0;
-  return noChannels && noTotal;
+  return !r.storefarm && !r.cafe24 && !r.etc && (!r.total_sales || r.total_sales === 0);
 }
 
 function dispCell(row: BrandSaleRow, col: ColDef): string {
@@ -137,7 +155,7 @@ function dispCell(row: BrandSaleRow, col: ColDef): string {
   if (col.field === 'date') return String(v);
   if (col.field === 'conversion_rate') {
     const n = Number(v);
-    return isNaN(n) || !isFinite(n) ? '-' : `${n.toFixed(1)}%`;
+    return isNaN(n) || !isFinite(n) ? '-' : `${n.toFixed(2)}%`;
   }
   if (col.field === 'inflow_cost') {
     const n = Math.round(Number(v));
@@ -149,16 +167,34 @@ function dispCell(row: BrandSaleRow, col: ColDef): string {
 
 function calcAutoFields(row: BrandSaleRow): BrandSaleRow {
   const r = { ...row };
-  // total_sales = storefarm + cafe24 + etc
   r.total_sales = (r.storefarm || 0) + (r.cafe24 || 0) + (r.etc || 0);
-  // inflow_cost = marketing_total / (inflow_24 + inflow_n)  [integer]
   const inflowSum = (r.inflow_24 || 0) + (r.inflow_n || 0);
-  r.inflow_cost = inflowSum > 0 ? Math.round((r.marketing_total || 0) / inflowSum) : null;
-  // conversion_rate = purchase_count / inflow_24 * 100  [소수점 1자리 %]
-  r.conversion_rate = (r.inflow_24 || 0) > 0
-    ? Number(((r.purchase_count || 0) / r.inflow_24! * 100).toFixed(1))
+  r.inflow_cost     = inflowSum > 0 ? Math.round((r.marketing_total || 0) / inflowSum) : null;
+  r.conversion_rate = inflowSum > 0
+    ? Number(((r.purchase_count || 0) / inflowSum * 100).toFixed(2))
     : null;
   return r;
+}
+
+function buildMonthlySummary(rows: BrandSaleRow[]): MonthSummary[] {
+  const map = new Map<string, MonthSummary>();
+  for (const r of rows) {
+    const month = r.date.slice(0, 7);
+    if (!map.has(month)) {
+      map.set(month, { month, total_sales: 0, storefarm: 0, cafe24: 0, etc: 0, marketing_total: 0, mktRatio: 0 });
+    }
+    const s = map.get(month)!;
+    s.total_sales    += r.total_sales    || 0;
+    s.storefarm      += r.storefarm      || 0;
+    s.cafe24         += r.cafe24         || 0;
+    s.etc            += r.etc            || 0;
+    s.marketing_total += r.marketing_total || 0;
+  }
+  const result = [...map.values()].sort((a, b) => b.month.localeCompare(a.month));
+  for (const s of result) {
+    s.mktRatio = s.total_sales > 0 ? s.marketing_total / s.total_sales * 100 : 0;
+  }
+  return result;
 }
 
 /* ─────────────────── Calculator helpers ─────────────────── */
@@ -176,32 +212,26 @@ const CALC_FUNCS = new Set(['C', '←', '=']);
 export default function SalesPage() {
   const now = new Date();
 
-  // ── Core ──
   const [tab,     setTab]     = useState<Brand>('innerpium');
   const [rows,    setRows]    = useState<BrandSaleRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ── Inline edit ──
-  const [editCell,  setEditCell]  = useState<{ rowId: number; field: keyof BrandSaleRow } | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const [savingRows, setSavingRows] = useState<Set<number>>(new Set());
-  const inputRef    = useRef<HTMLInputElement>(null);
+  const [editCell,    setEditCell]    = useState<{ rowId: number; field: keyof BrandSaleRow } | null>(null);
+  const [editValue,   setEditValue]   = useState('');
+  const [savingRows,  setSavingRows]  = useState<Set<number>>(new Set());
+  const inputRef      = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
 
-  // ── New row form ──
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
   const [formDate, setFormDate] = useState(todayStr());
 
-  // ── Download filter ──
   const [filterYear,  setFilterYear]  = useState(String(now.getFullYear()));
   const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
 
-  // ── Memo ──
   const [memo, setMemo] = useState('');
   useEffect(() => { setMemo(localStorage.getItem(`memo-${tab}`) || ''); }, [tab]);
 
-  // ── Calculator ──
   const [calcExpr,       setCalcExpr]       = useState('');
   const [calcResult,     setCalcResult]     = useState('0');
   const [calcShowResult, setCalcShowResult] = useState(false);
@@ -209,7 +239,6 @@ export default function SalesPage() {
   // ── Fetch ──
   const fetchRows = useCallback(async (brand: Brand) => {
     setLoading(true);
-    console.log(`[SalesPage] fetchRows — brand: ${brand}`);
     const { data, error } = await supabase
       .from('brand_sales')
       .select('*')
@@ -227,8 +256,6 @@ export default function SalesPage() {
   }, []);
 
   useEffect(() => { fetchRows(tab); }, [tab, fetchRows]);
-
-  // Focus input when editCell changes
   useEffect(() => { if (editCell) inputRef.current?.focus(); }, [editCell]);
 
   // ── Derived ──
@@ -240,35 +267,50 @@ export default function SalesPage() {
   if (!availableYears.includes(currentYearStr)) availableYears.unshift(currentYearStr);
 
   const downloadRows = rows.filter(r => {
-    if (filterYear  && !r.date.startsWith(filterYear)) return false;
+    if (filterYear && !r.date.startsWith(filterYear)) return false;
     if (filterYear && filterMonth && !r.date.startsWith(`${filterYear}-${filterMonth}`)) return false;
     return true;
   });
 
   // KPI — 이번달
   const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthRows  = rows.filter(r => r.date.startsWith(currentMonthPrefix));
-  const sumMonth   = (f: keyof BrandSaleRow) => monthRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
-  const totalRevenue = sumMonth('total_sales');
-  const storeFarm    = sumMonth('storefarm');
-  const cafe24Sum    = sumMonth('cafe24');
-  const purchases    = sumMonth('purchase_count');
-  const marketingSum = sumMonth('marketing_total');
-  const convRates    = monthRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
-  const avgConv      = convRates.length > 0 ? convRates.reduce((a, b) => a + b) / convRates.length : 0;
+  const monthRows    = rows.filter(r => r.date.startsWith(currentMonthPrefix));
+  const sumMonth     = (f: keyof BrandSaleRow) => monthRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
+  const kpiTotal     = sumMonth('total_sales');
+  const kpiStorefarm = sumMonth('storefarm');
+  const kpiCafe24    = sumMonth('cafe24');
+  const kpiEtc       = sumMonth('etc');
+  const kpiPurchases = sumMonth('purchase_count');
+  const kpiMarketing = sumMonth('marketing_total');
   const kpiSub       = `${now.getMonth() + 1}월 (${monthRows.length}일)`;
 
-  // Chart
-  const barKeys   = ['스토어팜', '카페24', '기타'];
-  const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
-    date: fmtDate(r.date),
-    스토어팜: r.storefarm ?? 0,
-    카페24:   r.cafe24    ?? 0,
-    기타:     r.etc       ?? 0,
-    총매출:   r.total_sales ?? 0,
+  // 월별 요약
+  const monthlySummary = buildMonthlySummary(rows);
+
+  // 분석: 마케팅비율 라인 (오름차순)
+  const mktRatioChartData = [...monthlySummary].reverse().map(s => ({
+    month: s.month.slice(5) + '월',
+    '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
   }));
 
-  // ── Inline edit handlers ──
+  // 분석: 이번달 채널 파이
+  const pieData = [
+    { name: '스토어팜', value: kpiStorefarm },
+    { name: '카페24',   value: kpiCafe24 },
+    { name: '기타',     value: kpiEtc },
+  ].filter(d => d.value > 0);
+
+  // 일별 차트
+  const barKeys   = ['스토어팜', '카페24', '기타'];
+  const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
+    date:    fmtDate(r.date),
+    스토어팜: r.storefarm    ?? 0,
+    카페24:   r.cafe24       ?? 0,
+    기타:     r.etc          ?? 0,
+    총매출:   r.total_sales  ?? 0,
+  }));
+
+  // ── Edit handlers ──
   function startEdit(rowId: number, field: keyof BrandSaleRow) {
     const col = cols.find(c => c.field === field);
     if (!col || col.auto || col.noEdit) return;
@@ -289,16 +331,13 @@ export default function SalesPage() {
     doSave(rowId, field, value).finally(() => { committingRef.current = false; });
   }
 
-  function cancelEdit() {
-    setEditCell(null);
-    setEditValue('');
-  }
+  function cancelEdit() { setEditCell(null); setEditValue(''); }
 
   async function doSave(rowId: number, field: keyof BrandSaleRow, value: string) {
     const row = rows.find(r => r.id === rowId);
     if (!row) return;
     const numVal = toNum(value);
-    if (numVal === row[field]) return; // no change
+    if (numVal === row[field]) return;
     const updated = calcAutoFields({ ...row, [field]: numVal });
     setRows(prev => prev.map(r => r.id === rowId ? updated : r));
     setSavingRows(prev => new Set([...prev, rowId]));
@@ -314,7 +353,6 @@ export default function SalesPage() {
     }
   }
 
-  // ── New row ──
   async function handleCreateRow() {
     if (!formDate) return;
     setSaving(true);
@@ -330,20 +368,16 @@ export default function SalesPage() {
     setSaving(false);
   }
 
-  // ── Delete ──
   async function handleDelete(id: number) {
     if (!confirm('이 행을 삭제하시겠어요?')) return;
     await supabase.from('brand_sales').delete().eq('id', id);
     setRows(prev => prev.filter(r => r.id !== id));
   }
 
-  // ── Excel download ──
   function handleDownload() {
     if (downloadRows.length === 0) return;
     const brandName = tab === 'innerpium' ? '이너피움' : '아쿠아크';
-    const period    = filterYear && filterMonth
-      ? `${filterYear}_${filterMonth}`
-      : filterYear || currentYearStr;
+    const period    = filterYear && filterMonth ? `${filterYear}_${filterMonth}` : filterYear || currentYearStr;
     const filename  = `${brandName}_매출_${period}.xlsx`;
     const headers   = cols.map(c => c.label);
     const dataRows  = downloadRows.map(row =>
@@ -363,11 +397,8 @@ export default function SalesPage() {
     XLSX.writeFile(wb, filename);
   }
 
-  // ── Calculator ──
   function calcPress(btn: string) {
-    if (btn === 'C') {
-      setCalcExpr(''); setCalcResult('0'); setCalcShowResult(false); return;
-    }
+    if (btn === 'C') { setCalcExpr(''); setCalcResult('0'); setCalcShowResult(false); return; }
     if (btn === '←') {
       if (calcShowResult) { setCalcExpr(''); setCalcResult('0'); setCalcShowResult(false); }
       else { setCalcExpr(p => p.slice(0, -1) || ''); }
@@ -384,11 +415,7 @@ export default function SalesPage() {
       } catch { setCalcResult('오류'); setCalcShowResult(true); }
       return;
     }
-    if (calcShowResult) {
-      setCalcExpr(CALC_OPS.has(btn) ? calcResult + btn : btn);
-      setCalcShowResult(false);
-      return;
-    }
+    if (calcShowResult) { setCalcExpr(CALC_OPS.has(btn) ? calcResult + btn : btn); setCalcShowResult(false); return; }
     setCalcExpr(p => p + btn);
   }
 
@@ -398,9 +425,8 @@ export default function SalesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── Header ── */}
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-        {/* Brand tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
           {(['innerpium', 'aquarc'] as Brand[]).map(t => (
             <button key={t} className={`btn ${tab === t ? 'btn-rose' : 'btn-ghost'}`}
@@ -410,7 +436,6 @@ export default function SalesPage() {
           ))}
         </div>
 
-        {/* Period filter (for download) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <select className="input" style={{ width: 90, fontSize: 12, padding: '4px 8px', height: 32 }}
             value={filterYear} onChange={e => setFilterYear(e.target.value)}>
@@ -425,15 +450,13 @@ export default function SalesPage() {
             ))}
           </select>
           {(filterYear || filterMonth) && (
-            <button className="btn btn-ghost btn-sm"
-              style={{ fontSize: 11, padding: '4px 8px', height: 32 }}
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 8px', height: 32 }}
               onClick={() => { setFilterYear(''); setFilterMonth(''); }}>
               전체
             </button>
           )}
         </div>
 
-        {/* Actions */}
         <div style={{ display: 'flex', gap: 6 }}>
           <button className="btn btn-ghost" style={{ fontSize: 12 }}
             onClick={handleDownload} disabled={downloadRows.length === 0}>
@@ -446,7 +469,7 @@ export default function SalesPage() {
         </div>
       </div>
 
-      {/* ── New row form ── */}
+      {/* New row form */}
       {showForm && (
         <div className="card" style={{ border: '2px solid var(--rose)' }}>
           <div className="card-head" style={{ justifyContent: 'space-between' }}>
@@ -460,9 +483,7 @@ export default function SalesPage() {
                 <input type="date" className="input" style={{ width: 160 }}
                   value={formDate} onChange={e => setFormDate(e.target.value)} />
               </div>
-              <p style={{ fontSize: 12, color: 'var(--text3)' }}>
-                행 추가 후 셀을 클릭해서 데이터를 입력하세요
-              </p>
+              <p style={{ fontSize: 12, color: 'var(--text3)' }}>행 추가 후 셀을 클릭해서 데이터를 입력하세요</p>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                 <button className="btn btn-ghost" onClick={() => setShowForm(false)}>취소</button>
                 <button className="btn btn-rose" onClick={handleCreateRow} disabled={saving}>
@@ -493,15 +514,15 @@ export default function SalesPage() {
 
             {/* KPI Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              <KpiCard label="이번달 총매출" value={money(totalRevenue)} sub={kpiSub} accent="var(--rose2)" />
-              <KpiCard label="스토어팜"      value={money(storeFarm)}    sub={kpiSub} />
-              <KpiCard label="카페24"        value={money(cafe24Sum)}    sub={kpiSub} />
-              <KpiCard label="구매건"        value={`${purchases.toLocaleString('ko-KR')}건`} sub={kpiSub} />
-              <KpiCard label="마케팅 비용"   value={money(marketingSum)} sub={kpiSub} />
-              <KpiCard label="평균 전환률"   value={pctStr(avgConv)}     sub={kpiSub} />
+              <KpiCard label="이번달 총매출"   value={wonFmt(kpiTotal)}     sub={kpiSub} accent="var(--rose2)" />
+              <KpiCard label="스토어팜"        value={wonFmt(kpiStorefarm)} sub={kpiSub} />
+              <KpiCard label="카페24"          value={wonFmt(kpiCafe24)}    sub={kpiSub} />
+              <KpiCard label="기타"            value={wonFmt(kpiEtc)}       sub={kpiSub} />
+              <KpiCard label="구매건"          value={`${numFmt(kpiPurchases)}건`} sub={kpiSub} />
+              <KpiCard label="마케팅총비용"    value={wonFmt(kpiMarketing)} sub={kpiSub} />
             </div>
 
-            {/* Chart */}
+            {/* 일별 매출 차트 */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title">▦ 일별 매출 현황</div>
@@ -513,9 +534,9 @@ export default function SalesPage() {
                     <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
                     <YAxis yAxisId="bar" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
-                      tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : String(v)} />
+                      tickFormatter={v => v >= 1_000_000 ? `${(v/1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v/1_000).toFixed(0)}K` : String(v)} />
                     <YAxis yAxisId="line" orientation="right" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
-                      tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : String(v)} />
+                      tickFormatter={v => v >= 1_000_000 ? `${(v/1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v/1_000).toFixed(0)}K` : String(v)} />
                     <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
                       // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       formatter={(v: any) => [`₩${Number(v ?? 0).toLocaleString('ko-KR')}`, undefined]} />
@@ -531,15 +552,146 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Inline-edit Table */}
+            {/* 월별 요약 테이블 */}
+            {monthlySummary.length > 0 && (
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">▤ 월별 요약</div>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>마케팅비율 = 마케팅총비용 / 총매출</span>
+                </div>
+                <div className="card-body" style={{ padding: 0 }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
+                      <thead>
+                        <tr>
+                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅총비용', '마케팅비율(%)'].map(h => (
+                            <th key={h} style={{
+                              padding: '8px 12px', textAlign: h === '월' ? 'left' : 'right',
+                              background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
+                              color: 'var(--text2)', fontWeight: 600, fontSize: 10,
+                            }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {monthlySummary.map((s, i) => (
+                          <tr key={s.month} style={{
+                            background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
+                            borderTop: '1px solid var(--border)',
+                          }}>
+                            <td style={{ padding: '7px 12px', fontWeight: 600, color: 'var(--text)' }}>{s.month}</td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: 'var(--text)', fontFamily: "'DM Mono',monospace" }}>
+                              {s.total_sales.toLocaleString('ko-KR')}
+                            </td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text)', fontFamily: "'DM Mono',monospace" }}>
+                              {s.storefarm.toLocaleString('ko-KR')}
+                            </td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text)', fontFamily: "'DM Mono',monospace" }}>
+                              {s.cafe24.toLocaleString('ko-KR')}
+                            </td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text)', fontFamily: "'DM Mono',monospace" }}>
+                              {s.etc.toLocaleString('ko-KR')}
+                            </td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', color: 'var(--text)', fontFamily: "'DM Mono',monospace" }}>
+                              {s.marketing_total.toLocaleString('ko-KR')}
+                            </td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, fontFamily: "'DM Mono',monospace",
+                              color: s.total_sales > 0 ? mktRatioColor(s.mktRatio) : 'var(--text3)' }}>
+                              {s.total_sales > 0 ? pctStr(s.mktRatio, 1) : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 분석 섹션 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+
+              {/* 마케팅비율 월별 라인차트 */}
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">▦ 마케팅비율 추이</div>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>월별 마케팅비용 / 총매출 (%)</span>
+                </div>
+                <div className="card-body">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={mktRatioChartData} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+                      <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
+                        tickFormatter={v => `${v}%`} domain={[0, 'auto']} />
+                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        formatter={(v: any) => [`${v}%`, '마케팅비율']} />
+                      <Line type="monotone" dataKey="마케팅비율(%)" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3, fill: '#f43f5e' }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  {/* 범례 색상 가이드 */}
+                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8, fontSize: 10 }}>
+                    {[['≤30%', '#10b981'], ['30~50%', '#f59e0b'], ['>50%', '#f43f5e']].map(([label, color]) => (
+                      <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text3)' }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 채널별 비중 파이차트 */}
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">◉ 채널별 비중</div>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{kpiSub} 기준</span>
+                </div>
+                <div className="card-body">
+                  {pieData.length > 0 ? (
+                    <>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <PieChart>
+                          <Pie data={pieData} cx="50%" cy="50%" outerRadius={68} dataKey="value"
+                            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}
+                            labelLine={false}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            style={{ fontSize: 10 } as any}>
+                            {pieData.map((_, idx) => (
+                              <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            formatter={(v: any) => [`₩${Number(v ?? 0).toLocaleString('ko-KR')}`, undefined]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 4 }}>
+                        {pieData.map((d, idx) => (
+                          <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text3)' }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[idx], display: 'inline-block' }} />
+                            {d.name}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 12, padding: '40px 0' }}>
+                      이번달 데이터 없음
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 일별 데이터 테이블 */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title">▤ 일별 데이터</div>
                 <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono',monospace" }}>
                   최근 {displayRows.length}행 · 셀 클릭으로 수정
-                  {savingRows.size > 0 && (
-                    <span style={{ color: 'var(--rose2)', marginLeft: 8 }}>저장 중…</span>
-                  )}
+                  {savingRows.size > 0 && <span style={{ color: 'var(--rose2)', marginLeft: 8 }}>저장 중…</span>}
                 </span>
               </div>
               <div className="card-body" style={{ padding: 0 }}>
@@ -552,8 +704,7 @@ export default function SalesPage() {
                             padding: '8px 10px', textAlign: 'center',
                             background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
                             color: c.auto ? 'var(--text3)' : c.bold ? 'var(--rose2)' : 'var(--text2)',
-                            fontWeight: c.bold ? 700 : 600, fontSize: 10,
-                            position: 'sticky', top: 0,
+                            fontWeight: c.bold ? 700 : 600, fontSize: 10, position: 'sticky', top: 0,
                           }}>
                             {c.label}{c.auto ? <span style={{ opacity: 0.5 }}> *</span> : ''}
                           </th>
@@ -586,21 +737,14 @@ export default function SalesPage() {
                                     padding: isEditing ? 0 : '7px 10px',
                                     textAlign: c.field === 'date' ? 'left' : 'right',
                                     fontWeight: c.bold ? 700 : 400,
-                                    color: c.auto
-                                      ? 'var(--text3)'
-                                      : c.bold
-                                      ? 'var(--text)'
-                                      : v === '-' ? 'var(--text3)' : 'var(--text)',
+                                    color: c.auto ? 'var(--text3)' : c.bold ? 'var(--text)' : v === '-' ? 'var(--text3)' : 'var(--text)',
                                     fontFamily: c.field === 'date' ? undefined : "'DM Mono', monospace",
                                     cursor: canEdit ? 'text' : 'default',
                                     background: isEditing ? 'rgba(244,63,94,0.06)' : undefined,
                                     minWidth: isEditing ? 80 : undefined,
                                   }}>
                                   {isEditing ? (
-                                    <input
-                                      ref={inputRef}
-                                      type="number"
-                                      value={editValue}
+                                    <input ref={inputRef} type="number" value={editValue}
                                       onChange={e => setEditValue(e.target.value)}
                                       onBlur={commitEdit}
                                       onKeyDown={e => {
@@ -612,8 +756,7 @@ export default function SalesPage() {
                                         background: 'transparent', border: 'none', outline: 'none',
                                         textAlign: 'right', fontSize: 11, color: 'var(--text)',
                                         fontFamily: "'DM Mono', monospace",
-                                      }}
-                                    />
+                                      }} />
                                   ) : v}
                                 </td>
                               );
@@ -638,80 +781,52 @@ export default function SalesPage() {
           {/* ── Right: side panel ── */}
           <div style={{ width: 248, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 16 }}>
 
-            {/* Memo */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title" style={{ fontSize: 12 }}>✎ 메모</div>
                 <span style={{ fontSize: 10, color: 'var(--text3)' }}>자동 저장</span>
               </div>
               <div className="card-body" style={{ padding: '8px 10px' }}>
-                <textarea
-                  value={memo}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setMemo(v);
-                    localStorage.setItem(`memo-${tab}`, v);
-                  }}
+                <textarea value={memo}
+                  onChange={e => { const v = e.target.value; setMemo(v); localStorage.setItem(`memo-${tab}`, v); }}
                   placeholder="자유롭게 메모하세요…"
                   style={{
-                    width: '100%', height: 148,
-                    background: 'transparent', border: 'none', outline: 'none',
-                    resize: 'vertical', fontSize: 12, color: 'var(--text)',
-                    fontFamily: 'inherit', lineHeight: 1.65,
-                  }}
-                />
+                    width: '100%', height: 148, background: 'transparent', border: 'none', outline: 'none',
+                    resize: 'vertical', fontSize: 12, color: 'var(--text)', fontFamily: 'inherit', lineHeight: 1.65,
+                  }} />
               </div>
             </div>
 
-            {/* Calculator */}
             <div className="card">
               <div className="card-head">
                 <div className="card-title" style={{ fontSize: 12 }}>⊞ 계산기</div>
               </div>
               <div className="card-body" style={{ padding: '8px 10px' }}>
-                {/* Display */}
                 <div style={{
-                  background: 'var(--surface2)', borderRadius: 8,
-                  padding: '8px 12px', marginBottom: 6,
+                  background: 'var(--surface2)', borderRadius: 8, padding: '8px 12px', marginBottom: 6,
                   textAlign: 'right', fontSize: 20, fontWeight: 700,
                   fontFamily: "'DM Mono', monospace", color: 'var(--text)',
                   minHeight: 44, wordBreak: 'break-all', lineHeight: 1.2,
                 }}>
                   {calcDisplay}
                 </div>
-                {/* Expression hint */}
                 {!calcShowResult && calcExpr && (
                   <div style={{
-                    textAlign: 'right', fontSize: 10, color: 'var(--text3)',
-                    marginBottom: 6, fontFamily: "'DM Mono', monospace",
-                    overflow: 'hidden', textOverflow: 'ellipsis',
+                    textAlign: 'right', fontSize: 10, color: 'var(--text3)', marginBottom: 6,
+                    fontFamily: "'DM Mono', monospace", overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
                     {calcExpr}
                   </div>
                 )}
-                {/* Buttons */}
                 {CALC_ROWS.map((btnRow, ri) => (
                   <div key={ri} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 4 }}>
                     {btnRow.map(btn => (
                       <button key={btn} onClick={() => calcPress(btn)} style={{
-                        padding: '10px 0', borderRadius: 6, border: 'none',
-                        cursor: 'pointer', fontSize: 13,
+                        padding: '10px 0', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13,
                         fontWeight: CALC_FUNCS.has(btn) || CALC_OPS.has(btn) ? 600 : 400,
                         fontFamily: "'DM Mono', monospace",
-                        background: btn === '='
-                          ? 'var(--rose2)'
-                          : CALC_OPS.has(btn)
-                          ? 'var(--surface2)'
-                          : CALC_FUNCS.has(btn)
-                          ? 'var(--surface2)'
-                          : 'var(--surface)',
-                        color: btn === '='
-                          ? '#fff'
-                          : btn === 'C'
-                          ? 'var(--rose2)'
-                          : CALC_OPS.has(btn)
-                          ? 'var(--rose2)'
-                          : 'var(--text)',
+                        background: btn === '=' ? 'var(--rose2)' : CALC_OPS.has(btn) || CALC_FUNCS.has(btn) ? 'var(--surface2)' : 'var(--surface)',
+                        color: btn === '=' ? '#fff' : btn === 'C' || CALC_OPS.has(btn) ? 'var(--rose2)' : 'var(--text)',
                       }}>
                         {btn}
                       </button>
@@ -735,7 +850,7 @@ function KpiCard({ label, value, sub, accent }: { label: string; value: string; 
       <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
         {label}
       </div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: accent ?? 'var(--text)', fontFamily: "'DM Mono', monospace", letterSpacing: '-0.03em' }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: accent ?? 'var(--text)', fontFamily: "'DM Mono', monospace", letterSpacing: '-0.02em', wordBreak: 'break-all' }}>
         {value}
       </div>
       {sub && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{sub}</div>}
