@@ -236,8 +236,9 @@ export default function SalesPage() {
   const [saving,   setSaving]   = useState(false);
   const [formDate, setFormDate] = useState(todayStr());
 
-  const [filterYear,  setFilterYear]  = useState(String(now.getFullYear()));
-  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
+  const [selectedYear,  setSelectedYear]  = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [selectedDay,   setSelectedDay]   = useState('');
 
   const [memo, setMemo] = useState('');
   useEffect(() => { setMemo(localStorage.getItem(`memo-${tab}`) || ''); }, [tab]);
@@ -260,6 +261,13 @@ export default function SalesPage() {
       (row.total_sales ?? 0) > 0
     ) ?? [];
     setRows(filtered);
+    // 가장 최근 데이터 날짜로 자동 설정
+    if (filtered.length > 0) {
+      const latest = filtered[0].date;
+      setSelectedYear(latest.slice(0, 4));
+      setSelectedMonth(latest.slice(5, 7));
+      setSelectedDay(latest.slice(8, 10));
+    }
     setLoading(false);
   }, []);
 
@@ -269,25 +277,47 @@ export default function SalesPage() {
   // ── Derived ──
   const cols = tab === 'innerpium' ? INNERPIUM_COLS : AQUACRC_COLS;
 
-  // 연/월 필터 적용된 행 (일별 테이블 & 차트용)
-  const filteredRows = rows.filter(r => {
-    if (filterYear && !r.date.startsWith(filterYear)) return false;
-    if (filterYear && filterMonth && !r.date.startsWith(`${filterYear}-${filterMonth}`)) return false;
-    return true;
-  });
+  // 선택 날짜 조합
+  const selectedMonthPrefix = selectedYear && selectedMonth ? `${selectedYear}-${selectedMonth}` : '';
+  const selectedDayStr      = selectedMonthPrefix && selectedDay ? `${selectedMonthPrefix}-${selectedDay}` : '';
 
-  // 일별 테이블: 필터 없을 때 최근 30일, 필터 있을 때 해당 기간 전체
-  const displayRows = (filterYear || filterMonth) ? filteredRows : rows.slice(0, 30);
+  // 드롭다운 옵션
+  const availableYears  = [...new Set(rows.map(r => r.date.slice(0, 4)))].sort().reverse();
+  const availableMonths = selectedYear
+    ? [...new Set(rows.filter(r => r.date.startsWith(selectedYear)).map(r => r.date.slice(5, 7)))].sort().reverse()
+    : [];
+  const availableDays = selectedMonthPrefix
+    ? [...new Set(rows.filter(r => r.date.startsWith(selectedMonthPrefix)).map(r => r.date.slice(8, 10)))].sort().reverse()
+    : [];
 
-  const availableYears = [...new Set(rows.map(r => r.date.slice(0, 4)))].sort().reverse();
-  const currentYearStr = String(now.getFullYear());
-  if (!availableYears.includes(currentYearStr)) availableYears.unshift(currentYearStr);
+  // 연/월 변경 시 하위 선택 자동 갱신
+  function handleYearChange(year: string) {
+    setSelectedYear(year);
+    const months = [...new Set(rows.filter(r => r.date.startsWith(year)).map(r => r.date.slice(5, 7)))].sort().reverse();
+    const m = months[0] ?? '';
+    setSelectedMonth(m);
+    if (m) {
+      const days = [...new Set(rows.filter(r => r.date.startsWith(`${year}-${m}`)).map(r => r.date.slice(8, 10)))].sort().reverse();
+      setSelectedDay(days[0] ?? '');
+    } else { setSelectedDay(''); }
+  }
+  function handleMonthChange(month: string) {
+    setSelectedMonth(month);
+    if (selectedYear && month) {
+      const days = [...new Set(rows.filter(r => r.date.startsWith(`${selectedYear}-${month}`)).map(r => r.date.slice(8, 10)))].sort().reverse();
+      setSelectedDay(days[0] ?? '');
+    } else { setSelectedDay(''); }
+  }
 
-  const downloadRows = filteredRows;
+  // 선택한 월 행 (테이블·차트·KPI 좌)
+  const filteredRows = selectedMonthPrefix
+    ? rows.filter(r => r.date.startsWith(selectedMonthPrefix))
+    : rows.slice(0, 30);
+  const displayRows  = filteredRows;
+  const downloadRows = selectedMonthPrefix ? rows.filter(r => r.date.startsWith(selectedMonthPrefix)) : rows;
 
-  // KPI — 이번달
-  const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const monthRows    = rows.filter(r => r.date.startsWith(currentMonthPrefix));
+  // KPI — 선택한 월
+  const monthRows    = selectedMonthPrefix ? rows.filter(r => r.date.startsWith(selectedMonthPrefix)) : [];
   const sumMonth     = (f: keyof BrandSaleRow) => monthRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
   const kpiTotal     = sumMonth('total_sales');
   const kpiStorefarm = sumMonth('storefarm');
@@ -295,34 +325,37 @@ export default function SalesPage() {
   const kpiEtc       = sumMonth('etc');
   const kpiPurchases = sumMonth('purchase_count');
   const kpiMarketing = sumMonth('marketing_total');
-  const kpiSub       = `${now.getMonth() + 1}월 (${monthRows.length}일)`;
+  const kpiSub       = selectedMonth ? `${Number(selectedMonth)}월 (${monthRows.length}일)` : '-';
 
-  // KPI — 오늘
-  const todayRow     = rows.find(r => r.date === todayStr());
-  const todayTotal     = todayRow?.total_sales     ?? null;
-  const todayStorefarm = todayRow?.storefarm        ?? null;
-  const todayCafe24    = todayRow?.cafe24           ?? null;
-  const todayEtc       = todayRow?.etc              ?? null;
-  const todayPurchases = todayRow?.purchase_count   ?? null;
-  const todayMarketing = todayRow?.marketing_total  ?? null;
+  // KPI — 선택한 날짜
+  const dayRow      = selectedDayStr ? rows.find(r => r.date === selectedDayStr) : null;
+  const dayTotal     = dayRow?.total_sales    ?? null;
+  const dayStorefarm = dayRow?.storefarm       ?? null;
+  const dayCafe24    = dayRow?.cafe24          ?? null;
+  const dayEtc       = dayRow?.etc             ?? null;
+  const dayPurchases = dayRow?.purchase_count  ?? null;
+  const dayMarketing = dayRow?.marketing_total ?? null;
 
   // 월별 요약
   const monthlySummary = buildMonthlySummary(rows);
 
-  // 분석: 마케팅비율 라인 (오름차순)
-  const mktRatioChartData = [...monthlySummary].reverse().map(s => ({
-    month: s.month.slice(5) + '월',
-    '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
-  }));
+  // 분석: 마케팅비율 추이 — 월별 누적, total_sales > 0인 월만
+  const mktRatioChartData = [...monthlySummary]
+    .filter(s => s.total_sales > 0)
+    .reverse()
+    .map(s => ({
+      month: s.month.slice(5) + '월',
+      '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
+    }));
 
-  // 분석: 이번달 채널 파이
+  // 분석: 선택한 월 채널 파이
   const pieData = [
     { name: '스토어팜', value: kpiStorefarm },
     { name: '카페24',   value: kpiCafe24 },
     { name: '기타',     value: kpiEtc },
   ].filter(d => d.value > 0);
 
-  // 일별 차트 (필터 없을 때 최근 30일, 있을 때 해당 기간)
+  // 일별 차트
   const barKeys   = ['스토어팜', '카페24', '기타'];
   const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
     date:    fmtDate(r.date),
@@ -406,7 +439,7 @@ export default function SalesPage() {
   function handleDownload() {
     if (downloadRows.length === 0) return;
     const brandName = tab === 'innerpium' ? '이너피움' : '아쿠아크';
-    const period    = filterYear && filterMonth ? `${filterYear}_${filterMonth}` : filterYear || currentYearStr;
+    const period    = selectedYear && selectedMonth ? `${selectedYear}_${selectedMonth}` : selectedYear || String(now.getFullYear());
     const filename  = `${brandName}_매출_${period}.xlsx`;
     const headers   = cols.map(c => c.label);
     const dataRows  = downloadRows.map(row =>
@@ -466,24 +499,21 @@ export default function SalesPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <select className="input" style={{ width: 90, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={filterYear} onChange={e => setFilterYear(e.target.value)}>
-            <option value="">전체</option>
+          <select className="input" style={{ width: 88, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={selectedYear} onChange={e => handleYearChange(e.target.value)}>
+            <option value="">연도</option>
             {availableYears.map(y => <option key={y} value={y}>{y}년</option>)}
           </select>
-          <select className="input" style={{ width: 76, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={filterMonth} onChange={e => setFilterMonth(e.target.value)} disabled={!filterYear}>
-            <option value="">전체</option>
-            {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
-              <option key={m} value={m}>{Number(m)}월</option>
-            ))}
+          <select className="input" style={{ width: 72, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={selectedMonth} onChange={e => handleMonthChange(e.target.value)} disabled={!selectedYear}>
+            <option value="">월</option>
+            {availableMonths.map(m => <option key={m} value={m}>{Number(m)}월</option>)}
           </select>
-          {(filterYear || filterMonth) && (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, padding: '4px 8px', height: 32 }}
-              onClick={() => { setFilterYear(''); setFilterMonth(''); }}>
-              전체
-            </button>
-          )}
+          <select className="input" style={{ width: 66, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={selectedDay} onChange={e => setSelectedDay(e.target.value)} disabled={!selectedMonth}>
+            <option value="">일</option>
+            {availableDays.map(d => <option key={d} value={d}>{Number(d)}일</option>)}
+          </select>
         </div>
 
         <div style={{ display: 'flex', gap: 6 }}>
@@ -559,18 +589,18 @@ export default function SalesPage() {
                   <MiniKpiRow key={label} label={label} value={value} accent={accent} />
                 ))}
               </div>
-              {/* 오늘 */}
+              {/* 선택한 날짜 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text2)', letterSpacing: '0.06em', textTransform: 'uppercase', paddingLeft: 2 }}>
-                  오늘 ({todayStr()})
+                  {selectedDayStr || '날짜 미선택'}
                 </div>
                 {[
-                  { label: '총매출',     value: wonFmt(todayTotal),                            accent: todayTotal ? 'var(--rose2)' : undefined },
-                  { label: '스토어팜',   value: wonFmt(todayStorefarm) },
-                  { label: '카페24',     value: wonFmt(todayCafe24) },
-                  { label: '기타',       value: wonFmt(todayEtc) },
-                  { label: '구매건',     value: todayPurchases != null ? `${numFmt(todayPurchases)}건` : '₩0' },
-                  { label: '마케팅비용', value: wonFmt(todayMarketing) },
+                  { label: '총매출',     value: wonFmt(dayTotal),                          accent: dayTotal ? 'var(--rose2)' : undefined },
+                  { label: '스토어팜',   value: wonFmt(dayStorefarm) },
+                  { label: '카페24',     value: wonFmt(dayCafe24) },
+                  { label: '기타',       value: wonFmt(dayEtc) },
+                  { label: '구매건',     value: dayPurchases != null ? `${numFmt(dayPurchases)}건` : '₩0' },
+                  { label: '마케팅비용', value: wonFmt(dayMarketing) },
                 ].map(({ label, value, accent }) => (
                   <MiniKpiRow key={label} label={label} value={value} accent={accent} />
                 ))}
