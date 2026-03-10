@@ -8,7 +8,7 @@ import {
 import { supabase } from '../../lib/supabase';
 
 /* ─────────────────── Types ─────────────────── */
-type Brand = 'innerpium' | 'aquacrc';
+type Brand = 'innerpium' | 'aquarc';
 
 interface BrandSaleRow {
   id: number;
@@ -218,16 +218,21 @@ export default function SalesPage() {
   // ── Fetch ──
   const fetchRows = useCallback(async (brand: Brand) => {
     setLoading(true);
-    const { data, error: err } = await supabase
+    console.log(`[SalesPage] fetchRows — brand: ${brand}`);
+    const { data, error } = await supabase
       .from('brand_sales')
       .select('*')
       .eq('brand', brand)
-      .or('total_revenue.gt.0,store_farm.not.is.null,cafe24.not.is.null,other.not.is.null,sinsegae_v.not.is.null,other_w.not.is.null')
-      .order('date', { ascending: false });
-    if (!err && data) {
-      // client-side fallback filter
-      setRows((data as BrandSaleRow[]).filter(r => !isEmptyRow(r)));
-    }
+      .order('date', { ascending: false })
+      .limit(60);
+    console.log('data:', data, 'error:', error);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filtered = (data as any[])?.filter(row =>
+      row.storefarm !== null ||
+      row.cafe24    !== null ||
+      row.total_sales > 0
+    ).map(row => row as BrandSaleRow) ?? [];
+    setRows(filtered);
     setLoading(false);
   }, []);
 
@@ -408,7 +413,7 @@ export default function SalesPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         {/* Brand tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
-          {(['innerpium', 'aquacrc'] as Brand[]).map(t => (
+          {(['innerpium', 'aquarc'] as Brand[]).map(t => (
             <button key={t} className={`btn ${tab === t ? 'btn-rose' : 'btn-ghost'}`}
               onClick={() => { setTab(t); setShowForm(false); cancelEdit(); }}>
               {t === 'innerpium' ? '이너피움' : '아쿠아크'}
