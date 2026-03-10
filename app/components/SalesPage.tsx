@@ -218,15 +218,36 @@ export default function SalesPage() {
   // ── Fetch ──
   const fetchRows = useCallback(async (brand: Brand) => {
     setLoading(true);
+
+    // ── DEBUG: 기본 쿼리 (필터 없이) ──
+    console.log(`[SalesPage] fetchRows 시작 — brand: ${brand}`);
+    const { data: rawData, error: rawErr } = await supabase
+      .from('brand_sales')
+      .select('*')
+      .eq('brand', brand)
+      .order('date', { ascending: false });
+    console.log(`[SalesPage] 기본 쿼리 결과 — data:`, rawData, '| error:', rawErr);
+    console.log(`[SalesPage] 행 개수: ${rawData?.length ?? 0}`);
+    if (rawData && rawData.length > 0) {
+      console.log('[SalesPage] 첫 번째 행 샘플:', rawData[0]);
+    }
+    if (rawErr) {
+      console.error('[SalesPage] Supabase 에러 코드:', rawErr.code, '| 메시지:', rawErr.message);
+      console.error('[SalesPage] RLS 문제일 경우 code=42501 또는 빈 배열 반환됨');
+    }
+    // ────────────────────────────────────
+
     const { data, error: err } = await supabase
       .from('brand_sales')
       .select('*')
       .eq('brand', brand)
       .or('total_revenue.gt.0,store_farm.not.is.null,cafe24.not.is.null,other.not.is.null,sinsegae_v.not.is.null,other_w.not.is.null')
       .order('date', { ascending: false });
+    console.log(`[SalesPage] 필터 쿼리 결과 — data:`, data, '| error:', err);
     if (!err && data) {
-      // client-side fallback filter
-      setRows((data as BrandSaleRow[]).filter(r => !isEmptyRow(r)));
+      const filtered = (data as BrandSaleRow[]).filter(r => !isEmptyRow(r));
+      console.log(`[SalesPage] isEmptyRow 필터 후 행 개수: ${filtered.length}`);
+      setRows(filtered);
     }
     setLoading(false);
   }, []);
