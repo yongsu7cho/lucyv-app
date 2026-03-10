@@ -88,17 +88,18 @@ function mapRow(platform: Platform, raw: RawRow): OrderRow {
     row.고객주문번호 = g(raw, '주문번호');
     row.배송메모 = g(raw, '배송메모');
   } else if (platform === '무신사') {
-    row.받는사람 = g(raw, '수령자');
-    row.받는사람전화번호 = g(raw, '핸드폰');
-    row.받는사람핸드폰 = g(raw, '핸드폰');
-    row.우편 = g(raw, '우편번호');
-    row.받는사람주소 = [g(raw, '주소1(기본주소)'), g(raw, '주소2(상세주소)')].filter(Boolean).join(' ');
-    row.수량 = g(raw, '주문수량');
-    const prodNo = g(raw, '상품번호');
-    const prodName = g(raw, '상품명');
-    row.품목명 = prodNo ? `[${prodNo}]${prodName}` : prodName;
-    row.고객주문번호 = g(raw, '주문번호');
-    row.배송메모 = g(raw, '출고메시지');
+    row.고객주문번호 = g(raw, '0');
+    row.배송메모 = g(raw, '1');
+    row.받는사람 = g(raw, '3');
+    row.우편 = g(raw, '4');
+    row.받는사람주소 = [g(raw, '6'), g(raw, '7')].filter(Boolean).join(' ');
+    row.받는사람전화번호 = g(raw, '9');
+    row.받는사람핸드폰 = g(raw, '9');
+    const rawProduct = g(raw, '10');
+    const prodName = rawProduct.replace(/^\[\d+\]/, '').trim();
+    const option = g(raw, '11');
+    row.품목명 = option && option !== 'NONE' ? `${prodName} / ${option}` : prodName;
+    row.수량 = g(raw, '12');
   } else if (platform === 'W컨셉') {
     row.받는사람 = g(raw, '수취인');
     row.받는사람전화번호 = g(raw, '수취인연락처1');
@@ -142,6 +143,8 @@ function parseHTMLTable(html: string): RawRow[] {
       const cells = Array.from(row.querySelectorAll('td')).map(el => el.textContent?.trim() ?? '');
       const obj: RawRow = {};
       headers.forEach((h, i) => { obj[h] = cells[i] ?? ''; });
+      // 인덱스 기반 접근용 숫자 키도 저장
+      cells.forEach((v, i) => { obj[String(i)] = v; });
       return obj;
     })
     .filter(obj => Object.values(obj).some(v => v !== ''));
