@@ -323,10 +323,7 @@ export default function Home() {
             <CalendarPage />
           )}
           {activeTab === 'settlement' && (
-            <SettlementPage
-              settlements={settlements}
-              setSettlements={setSettlements}
-            />
+            <SettlementPage />
           )}
           {activeTab === 'team' && (
             <TeamPage
