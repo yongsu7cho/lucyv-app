@@ -14,17 +14,15 @@ interface BrandSaleRow {
   id: number;
   brand: Brand;
   date: string;
-  store_farm: number | null;
+  storefarm: number | null;
   cafe24: number | null;
-  other: number | null;
-  sinsegae_v: number | null;
-  other_w: number | null;
-  total_revenue: number | null;
-  brand_sales: number | null;
+  etc: number | null;
+  total_sales: number | null;
+  main_product_sales: number | null;
   purchase_count: number | null;
-  brand_qty: number | null;
+  main_product_qty: number | null;
   event: number | null;
-  budget: number | null;
+  budget_setting: number | null;
   marketing_total: number | null;
   inflow_24: number | null;
   inflow_n: number | null;
@@ -48,58 +46,55 @@ interface ColDef {
 }
 
 const INNERPIUM_COLS: ColDef[] = [
-  { field: 'date',           label: '날짜',         noEdit: true },
-  { field: 'store_farm',     label: '스토어팜' },
-  { field: 'cafe24',         label: '카페24' },
-  { field: 'other',          label: '기타' },
-  { field: 'total_revenue',  label: '총매출',        bold: true, auto: true },
-  { field: 'brand_sales',    label: '유산균매출' },
-  { field: 'purchase_count', label: '구매건' },
-  { field: 'brand_qty',      label: '유산균수량' },
-  { field: 'event',          label: 'EVENT' },
-  { field: 'budget',         label: '설정금액' },
-  { field: 'marketing_total',label: '마케팅총금액비용' },
-  { field: 'inflow_24',      label: '유입(24)' },
-  { field: 'inflow_n',       label: '유입(N)' },
-  { field: 'inflow_cost',    label: '유입비용',      auto: true },
-  { field: 'conversion_rate',label: '전환률',        auto: true },
-  { field: 'signup',         label: '회원가입' },
-  { field: 'wishlist',       label: '찜' },
-  { field: 'kakao',          label: '카카오' },
-  { field: 'insta',          label: '인스타' },
-  { field: 'insta_total',    label: '인스타총' },
+  { field: 'date',               label: '날짜',         noEdit: true },
+  { field: 'storefarm',          label: '스토어팜' },
+  { field: 'cafe24',             label: '카페24' },
+  { field: 'etc',                label: '기타' },
+  { field: 'total_sales',        label: '총매출',        bold: true, auto: true },
+  { field: 'main_product_sales', label: '유산균매출' },
+  { field: 'purchase_count',     label: '구매건' },
+  { field: 'main_product_qty',   label: '유산균수량' },
+  { field: 'event',              label: 'EVENT' },
+  { field: 'budget_setting',     label: '설정금액' },
+  { field: 'marketing_total',    label: '마케팅총금액비용' },
+  { field: 'inflow_24',          label: '유입(24)' },
+  { field: 'inflow_n',           label: '유입(N)' },
+  { field: 'inflow_cost',        label: '유입비용',      auto: true },
+  { field: 'conversion_rate',    label: '전환률',        auto: true },
+  { field: 'signup',             label: '회원가입' },
+  { field: 'wishlist',           label: '찜' },
+  { field: 'kakao',              label: '카카오' },
+  { field: 'insta',              label: '인스타' },
+  { field: 'insta_total',        label: '인스타총' },
 ];
 
 const AQUACRC_COLS: ColDef[] = [
-  { field: 'date',           label: '날짜',          noEdit: true },
-  { field: 'store_farm',     label: '스토어팜' },
-  { field: 'cafe24',         label: '카페24' },
-  { field: 'sinsegae_v',     label: '신세계V' },
-  { field: 'other_w',        label: '기타(더블유)' },
-  { field: 'total_revenue',  label: '총매출',         bold: true, auto: true },
-  { field: 'brand_sales',    label: '클렌저매출' },
-  { field: 'purchase_count', label: '구매건' },
-  { field: 'brand_qty',      label: '클렌저수량' },
-  { field: 'event',          label: 'EVENT' },
-  { field: 'budget',         label: '설정금액' },
-  { field: 'marketing_total',label: '마케팅총금액비용' },
-  { field: 'inflow_24',      label: '유입(24)' },
-  { field: 'inflow_n',       label: '유입(N)' },
-  { field: 'inflow_cost',    label: '유입비용',       auto: true },
-  { field: 'conversion_rate',label: '전환률',         auto: true },
-  { field: 'signup',         label: '회원가입' },
-  { field: 'wishlist',       label: '찜' },
-  { field: 'kakao',          label: '카카오' },
-  { field: 'insta',          label: '인스타' },
-  { field: 'insta_total',    label: '인스타총' },
+  { field: 'date',               label: '날짜',          noEdit: true },
+  { field: 'storefarm',          label: '스토어팜' },
+  { field: 'cafe24',             label: '카페24' },
+  { field: 'etc',                label: '기타' },
+  { field: 'total_sales',        label: '총매출',         bold: true, auto: true },
+  { field: 'main_product_sales', label: '클렌저매출' },
+  { field: 'purchase_count',     label: '구매건' },
+  { field: 'main_product_qty',   label: '클렌저수량' },
+  { field: 'event',              label: 'EVENT' },
+  { field: 'budget_setting',     label: '설정금액' },
+  { field: 'marketing_total',    label: '마케팅총금액비용' },
+  { field: 'inflow_24',          label: '유입(24)' },
+  { field: 'inflow_n',           label: '유입(N)' },
+  { field: 'inflow_cost',        label: '유입비용',       auto: true },
+  { field: 'conversion_rate',    label: '전환률',         auto: true },
+  { field: 'signup',             label: '회원가입' },
+  { field: 'wishlist',           label: '찜' },
+  { field: 'kakao',              label: '카카오' },
+  { field: 'insta',              label: '인스타' },
+  { field: 'insta_total',        label: '인스타총' },
 ];
 
 /* ─────────────────── Helpers ─────────────────── */
 const CHART_COLORS: Record<string, string> = {
   스토어팜: '#10b981',
   카페24: '#3b82f6',
-  신세계V: '#8b5cf6',
-  '기타(더블유)': '#94a3b8',
   기타: '#94a3b8',
   총매출: '#f43f5e',
 };
@@ -131,8 +126,8 @@ function fmtDate(s: string): string {
 }
 
 function isEmptyRow(r: BrandSaleRow): boolean {
-  const noChannels = !r.store_farm && !r.cafe24 && !r.other && !r.sinsegae_v && !r.other_w;
-  const noTotal    = !r.total_revenue || r.total_revenue === 0;
+  const noChannels = !r.storefarm && !r.cafe24 && !r.etc;
+  const noTotal    = !r.total_sales || r.total_sales === 0;
   return noChannels && noTotal;
 }
 
@@ -152,14 +147,10 @@ function dispCell(row: BrandSaleRow, col: ColDef): string {
   return isNaN(n) ? '-' : n.toLocaleString('ko-KR');
 }
 
-function calcAutoFields(row: BrandSaleRow, brand: Brand): BrandSaleRow {
+function calcAutoFields(row: BrandSaleRow): BrandSaleRow {
   const r = { ...row };
-  // total_revenue
-  if (brand === 'innerpium') {
-    r.total_revenue = (r.store_farm || 0) + (r.cafe24 || 0) + (r.other || 0);
-  } else {
-    r.total_revenue = (r.store_farm || 0) + (r.cafe24 || 0) + (r.sinsegae_v || 0) + (r.other_w || 0);
-  }
+  // total_sales = storefarm + cafe24 + etc
+  r.total_sales = (r.storefarm || 0) + (r.cafe24 || 0) + (r.etc || 0);
   // inflow_cost = marketing_total / (inflow_24 + inflow_n)  [integer]
   const inflowSum = (r.inflow_24 || 0) + (r.inflow_n || 0);
   r.inflow_cost = inflowSum > 0 ? Math.round((r.marketing_total || 0) / inflowSum) : null;
@@ -226,12 +217,11 @@ export default function SalesPage() {
       .order('date', { ascending: false })
       .limit(60);
     console.log('data:', data, 'error:', error);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filtered = (data as any[])?.filter(row =>
+    const filtered = (data as BrandSaleRow[])?.filter(row =>
       row.storefarm !== null ||
       row.cafe24    !== null ||
-      row.total_sales > 0
-    ).map(row => row as BrandSaleRow) ?? [];
+      (row.total_sales ?? 0) > 0
+    ) ?? [];
     setRows(filtered);
     setLoading(false);
   }, []);
@@ -259,8 +249,8 @@ export default function SalesPage() {
   const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const monthRows  = rows.filter(r => r.date.startsWith(currentMonthPrefix));
   const sumMonth   = (f: keyof BrandSaleRow) => monthRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
-  const totalRevenue = sumMonth('total_revenue');
-  const storeFarm    = sumMonth('store_farm');
+  const totalRevenue = sumMonth('total_sales');
+  const storeFarm    = sumMonth('storefarm');
   const cafe24Sum    = sumMonth('cafe24');
   const purchases    = sumMonth('purchase_count');
   const marketingSum = sumMonth('marketing_total');
@@ -269,15 +259,14 @@ export default function SalesPage() {
   const kpiSub       = `${now.getMonth() + 1}월 (${monthRows.length}일)`;
 
   // Chart
-  const barKeys   = tab === 'innerpium' ? ['스토어팜', '카페24', '기타'] : ['스토어팜', '카페24', '신세계V', '기타(더블유)'];
-  const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => {
-    const base: Record<string, string | number> = {
-      date: fmtDate(r.date), 스토어팜: r.store_farm ?? 0, 카페24: r.cafe24 ?? 0, 총매출: r.total_revenue ?? 0,
-    };
-    if (tab === 'innerpium') base['기타'] = r.other ?? 0;
-    else { base['신세계V'] = r.sinsegae_v ?? 0; base['기타(더블유)'] = r.other_w ?? 0; }
-    return base;
-  });
+  const barKeys   = ['스토어팜', '카페24', '기타'];
+  const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
+    date: fmtDate(r.date),
+    스토어팜: r.storefarm ?? 0,
+    카페24:   r.cafe24    ?? 0,
+    기타:     r.etc       ?? 0,
+    총매출:   r.total_sales ?? 0,
+  }));
 
   // ── Inline edit handlers ──
   function startEdit(rowId: number, field: keyof BrandSaleRow) {
@@ -310,13 +299,13 @@ export default function SalesPage() {
     if (!row) return;
     const numVal = toNum(value);
     if (numVal === row[field]) return; // no change
-    const updated = calcAutoFields({ ...row, [field]: numVal }, tab);
+    const updated = calcAutoFields({ ...row, [field]: numVal });
     setRows(prev => prev.map(r => r.id === rowId ? updated : r));
     setSavingRows(prev => new Set([...prev, rowId]));
     try {
       await supabase.from('brand_sales').update({
         [field]: numVal,
-        total_revenue:   updated.total_revenue,
+        total_sales:     updated.total_sales,
         inflow_cost:     updated.inflow_cost,
         conversion_rate: updated.conversion_rate,
       }).eq('id', rowId);
