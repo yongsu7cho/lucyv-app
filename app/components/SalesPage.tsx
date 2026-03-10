@@ -246,16 +246,14 @@ export default function SalesPage() {
   const [calcResult,     setCalcResult]     = useState('0');
   const [calcShowResult, setCalcShowResult] = useState(false);
 
-  // ── Fetch ──
+  // ── Fetch — 전체 데이터 한번에 로드 (limit 없음) ──
   const fetchRows = useCallback(async (brand: Brand) => {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('brand_sales')
       .select('*')
       .eq('brand', brand)
-      .order('date', { ascending: false })
-      .limit(60);
-    console.log('data:', data, 'error:', error);
+      .order('date', { ascending: false });
     const filtered = (data as BrandSaleRow[])?.filter(row =>
       row.storefarm !== null ||
       row.cafe24    !== null ||
@@ -269,18 +267,23 @@ export default function SalesPage() {
   useEffect(() => { if (editCell) inputRef.current?.focus(); }, [editCell]);
 
   // ── Derived ──
-  const cols        = tab === 'innerpium' ? INNERPIUM_COLS : AQUACRC_COLS;
-  const displayRows = rows.slice(0, 30);
+  const cols = tab === 'innerpium' ? INNERPIUM_COLS : AQUACRC_COLS;
+
+  // 연/월 필터 적용된 행 (일별 테이블 & 차트용)
+  const filteredRows = rows.filter(r => {
+    if (filterYear && !r.date.startsWith(filterYear)) return false;
+    if (filterYear && filterMonth && !r.date.startsWith(`${filterYear}-${filterMonth}`)) return false;
+    return true;
+  });
+
+  // 일별 테이블: 필터 없을 때 최근 30일, 필터 있을 때 해당 기간 전체
+  const displayRows = (filterYear || filterMonth) ? filteredRows : rows.slice(0, 30);
 
   const availableYears = [...new Set(rows.map(r => r.date.slice(0, 4)))].sort().reverse();
   const currentYearStr = String(now.getFullYear());
   if (!availableYears.includes(currentYearStr)) availableYears.unshift(currentYearStr);
 
-  const downloadRows = rows.filter(r => {
-    if (filterYear && !r.date.startsWith(filterYear)) return false;
-    if (filterYear && filterMonth && !r.date.startsWith(`${filterYear}-${filterMonth}`)) return false;
-    return true;
-  });
+  const downloadRows = filteredRows;
 
   // KPI — 이번달
   const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -319,7 +322,7 @@ export default function SalesPage() {
     { name: '기타',     value: kpiEtc },
   ].filter(d => d.value > 0);
 
-  // 일별 차트
+  // 일별 차트 (필터 없을 때 최근 30일, 있을 때 해당 기간)
   const barKeys   = ['스토어팜', '카페24', '기타'];
   const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => ({
     date:    fmtDate(r.date),
