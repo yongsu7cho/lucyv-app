@@ -44,7 +44,10 @@ interface MonthSummary {
   cafe24: number;
   etc: number;
   marketing_total: number;
+  purchase_count: number;
+  main_product_qty: number;
   mktRatio: number;
+  net_profit: number;
 }
 
 /* ─────────────────── Column Definitions ─────────────────── */
@@ -185,18 +188,21 @@ function buildMonthlySummary(rows: BrandSaleRow[]): MonthSummary[] {
   for (const r of rows) {
     const month = r.date.slice(0, 7);
     if (!map.has(month)) {
-      map.set(month, { month, total_sales: 0, storefarm: 0, cafe24: 0, etc: 0, marketing_total: 0, mktRatio: 0 });
+      map.set(month, { month, total_sales: 0, storefarm: 0, cafe24: 0, etc: 0, marketing_total: 0, purchase_count: 0, main_product_qty: 0, mktRatio: 0, net_profit: 0 });
     }
     const s = map.get(month)!;
-    s.total_sales    += r.total_sales    || 0;
-    s.storefarm      += r.storefarm      || 0;
-    s.cafe24         += r.cafe24         || 0;
-    s.etc            += r.etc            || 0;
-    s.marketing_total += r.marketing_total || 0;
+    s.total_sales      += r.total_sales      || 0;
+    s.storefarm        += r.storefarm        || 0;
+    s.cafe24           += r.cafe24           || 0;
+    s.etc              += r.etc              || 0;
+    s.marketing_total  += r.marketing_total  || 0;
+    s.purchase_count   += r.purchase_count   || 0;
+    s.main_product_qty += r.main_product_qty || 0;
   }
   const result = [...map.values()].sort((a, b) => b.month.localeCompare(a.month));
   for (const s of result) {
-    s.mktRatio = s.total_sales > 0 ? s.marketing_total / s.total_sales * 100 : 0;
+    s.mktRatio  = s.total_sales > 0 ? s.marketing_total / s.total_sales * 100 : 0;
+    s.net_profit = s.total_sales - s.marketing_total - (s.purchase_count * 4000) - (s.main_product_qty * 11000);
   }
   return result;
 }
@@ -287,6 +293,15 @@ export default function SalesPage() {
   const kpiPurchases = sumMonth('purchase_count');
   const kpiMarketing = sumMonth('marketing_total');
   const kpiSub       = `${now.getMonth() + 1}월 (${monthRows.length}일)`;
+
+  // KPI — 오늘
+  const todayRow     = rows.find(r => r.date === todayStr());
+  const todayTotal     = todayRow?.total_sales     ?? null;
+  const todayStorefarm = todayRow?.storefarm        ?? null;
+  const todayCafe24    = todayRow?.cafe24           ?? null;
+  const todayEtc       = todayRow?.etc              ?? null;
+  const todayPurchases = todayRow?.purchase_count   ?? null;
+  const todayMarketing = todayRow?.marketing_total  ?? null;
 
   // 월별 요약
   const monthlySummary = buildMonthlySummary(rows);
@@ -523,14 +538,40 @@ export default function SalesPage() {
           {/* ── Left: main content ── */}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* KPI Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              <KpiCard label="이번달 총매출"   value={wonFmt(kpiTotal)}     sub={kpiSub} accent="var(--rose2)" />
-              <KpiCard label="스토어팜"        value={wonFmt(kpiStorefarm)} sub={kpiSub} />
-              <KpiCard label="카페24"          value={wonFmt(kpiCafe24)}    sub={kpiSub} />
-              <KpiCard label="기타"            value={wonFmt(kpiEtc)}       sub={kpiSub} />
-              <KpiCard label="구매건"          value={`${numFmt(kpiPurchases)}건`} sub={kpiSub} />
-              <KpiCard label="마케팅총비용"    value={wonFmt(kpiMarketing)} sub={kpiSub} />
+            {/* KPI Cards — 이번달 / 오늘 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {/* 이번달 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--rose2)', letterSpacing: '0.06em', textTransform: 'uppercase', paddingLeft: 2 }}>
+                  이번달 ({kpiSub})
+                </div>
+                {[
+                  { label: '총매출',     value: wonFmt(kpiTotal),                    accent: 'var(--rose2)' },
+                  { label: '스토어팜',   value: wonFmt(kpiStorefarm) },
+                  { label: '카페24',     value: wonFmt(kpiCafe24) },
+                  { label: '기타',       value: wonFmt(kpiEtc) },
+                  { label: '구매건',     value: `${numFmt(kpiPurchases)}건` },
+                  { label: '마케팅비용', value: wonFmt(kpiMarketing) },
+                ].map(({ label, value, accent }) => (
+                  <MiniKpiRow key={label} label={label} value={value} accent={accent} />
+                ))}
+              </div>
+              {/* 오늘 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text2)', letterSpacing: '0.06em', textTransform: 'uppercase', paddingLeft: 2 }}>
+                  오늘 ({todayStr()})
+                </div>
+                {[
+                  { label: '총매출',     value: wonFmt(todayTotal),                            accent: todayTotal ? 'var(--rose2)' : undefined },
+                  { label: '스토어팜',   value: wonFmt(todayStorefarm) },
+                  { label: '카페24',     value: wonFmt(todayCafe24) },
+                  { label: '기타',       value: wonFmt(todayEtc) },
+                  { label: '구매건',     value: todayPurchases != null ? `${numFmt(todayPurchases)}건` : '₩0' },
+                  { label: '마케팅비용', value: wonFmt(todayMarketing) },
+                ].map(({ label, value, accent }) => (
+                  <MiniKpiRow key={label} label={label} value={value} accent={accent} />
+                ))}
+              </div>
             </div>
 
             {/* 일별 매출 차트 */}
@@ -563,19 +604,19 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* 월별 요약 테이블 */}
+            {/* 월별 요약 테이블 — 최근 6개월 */}
             {monthlySummary.length > 0 && (
               <div className="card">
                 <div className="card-head">
                   <div className="card-title">▤ 월별 요약</div>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>마케팅비율 = 마케팅총비용 / 총매출</span>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>최근 6개월 · 순이익 = 총매출 - 마케팅 - 구매건×4,000 - 수량×11,000</span>
                 </div>
                 <div className="card-body" style={{ padding: 0 }}>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
                       <thead>
                         <tr>
-                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅총비용', '마케팅비율(%)'].map(h => (
+                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅비용', '마케팅비율(%)', '순이익'].map(h => (
                             <th key={h} style={{
                               padding: '8px 12px', textAlign: h === '월' ? 'left' : 'right',
                               background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
@@ -585,7 +626,7 @@ export default function SalesPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {monthlySummary.map((s, i) => (
+                        {monthlySummary.slice(0, 6).map((s, i) => (
                           <tr key={s.month} style={{
                             background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
                             borderTop: '1px solid var(--border)',
@@ -610,6 +651,10 @@ export default function SalesPage() {
                               color: s.total_sales > 0 ? mktRatioColor(s.mktRatio) : 'var(--text3)' }}>
                               {s.total_sales > 0 ? pctStr(s.mktRatio, 1) : '-'}
                             </td>
+                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, fontFamily: "'DM Mono',monospace",
+                              color: s.net_profit >= 0 ? '#10b981' : '#f43f5e' }}>
+                              {s.net_profit.toLocaleString('ko-KR')}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -620,32 +665,30 @@ export default function SalesPage() {
             )}
 
             {/* 분석 섹션 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
 
               {/* 마케팅비율 월별 라인차트 */}
               <div className="card">
                 <div className="card-head">
                   <div className="card-title">▦ 마케팅비율 추이</div>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>월별 마케팅비용 / 총매출 (%)</span>
                 </div>
-                <div className="card-body">
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={mktRatioChartData} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+                <div className="card-body" style={{ padding: '8px 10px' }}>
+                  <ResponsiveContainer width="100%" height={120}>
+                    <LineChart data={mktRatioChartData} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
-                        tickFormatter={v => `${v}%`} domain={[0, 'auto']} />
-                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
+                        tickFormatter={v => `${v}%`} domain={[0, 'auto']} width={28} />
+                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         formatter={(v: any) => [`${v}%`, '마케팅비율']} />
-                      <Line type="monotone" dataKey="마케팅비율(%)" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3, fill: '#f43f5e' }} />
+                      <Line type="monotone" dataKey="마케팅비율(%)" stroke="#f43f5e" strokeWidth={2} dot={{ r: 2, fill: '#f43f5e' }} />
                     </LineChart>
                   </ResponsiveContainer>
-                  {/* 범례 색상 가이드 */}
-                  <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 8, fontSize: 10 }}>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 6, fontSize: 9 }}>
                     {[['≤30%', '#10b981'], ['30~50%', '#f59e0b'], ['>50%', '#f43f5e']].map(([label, color]) => (
-                      <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text3)' }}>
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+                      <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--text3)' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
                         {label}
                       </span>
                     ))}
@@ -657,41 +700,80 @@ export default function SalesPage() {
               <div className="card">
                 <div className="card-head">
                   <div className="card-title">◉ 채널별 비중</div>
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>{kpiSub} 기준</span>
+                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>{kpiSub}</span>
                 </div>
-                <div className="card-body">
+                <div className="card-body" style={{ padding: '8px 10px' }}>
                   {pieData.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height={160}>
+                      <ResponsiveContainer width="100%" height={110}>
                         <PieChart>
-                          <Pie data={pieData} cx="50%" cy="50%" outerRadius={68} dataKey="value"
-                            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}
+                          <Pie data={pieData} cx="50%" cy="50%" outerRadius={46} dataKey="value"
+                            label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
                             labelLine={false}
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            style={{ fontSize: 10 } as any}>
+                            style={{ fontSize: 9 } as any}>
                             {pieData.map((_, idx) => (
                               <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
                             ))}
                           </Pie>
-                          <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+                          <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             formatter={(v: any) => [`₩${Number(v ?? 0).toLocaleString('ko-KR')}`, undefined]} />
                         </PieChart>
                       </ResponsiveContainer>
-                      <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 4 }}>
+                      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 4 }}>
                         {pieData.map((d, idx) => (
-                          <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text3)' }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[idx], display: 'inline-block' }} />
+                          <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--text3)' }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_COLORS[idx], display: 'inline-block' }} />
                             {d.name}
                           </span>
                         ))}
                       </div>
                     </>
                   ) : (
-                    <div style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 12, padding: '40px 0' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 11, padding: '30px 0' }}>
                       이번달 데이터 없음
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* 월별 순이익 표 */}
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">▤ 월별 순이익</div>
+                </div>
+                <div className="card-body" style={{ padding: 0 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+                    <thead>
+                      <tr>
+                        {['월', '순이익'].map(h => (
+                          <th key={h} style={{
+                            padding: '6px 10px', textAlign: h === '월' ? 'left' : 'right',
+                            background: 'var(--surface2)', borderBottom: '1px solid var(--border)',
+                            color: 'var(--text2)', fontWeight: 600, fontSize: 9,
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlySummary.slice(0, 6).map((s, i) => (
+                        <tr key={s.month} style={{
+                          background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
+                          borderTop: '1px solid var(--border)',
+                        }}>
+                          <td style={{ padding: '5px 10px', color: 'var(--text2)', fontWeight: 600 }}>{s.month.slice(5)}월</td>
+                          <td style={{
+                            padding: '5px 10px', textAlign: 'right', fontWeight: 700,
+                            fontFamily: "'DM Mono',monospace",
+                            color: s.net_profit >= 0 ? '#10b981' : '#f43f5e',
+                          }}>
+                            {s.net_profit.toLocaleString('ko-KR')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -865,6 +947,16 @@ function KpiCard({ label, value, sub, accent }: { label: string; value: string; 
         {value}
       </div>
       {sub && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ─────────────────── Mini KPI Row ─────────────────── */
+function MiniKpiRow({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="card" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: accent ?? 'var(--text)', fontFamily: "'DM Mono', monospace" }}>{value}</span>
     </div>
   );
 }
