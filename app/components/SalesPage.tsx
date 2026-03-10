@@ -258,6 +258,7 @@ export default function SalesPage() {
   const [savingRows,  setSavingRows]  = useState<Set<number>>(new Set());
   const inputRef      = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
+  const calcRef       = useRef<HTMLDivElement>(null);
 
   const [showForm, setShowForm] = useState(false);
   const [saving,   setSaving]   = useState(false);
@@ -524,6 +525,20 @@ export default function SalesPage() {
     setCalcExpr(p => p + btn);
   }
 
+  function handleCalcKeyDown(e: React.KeyboardEvent) {
+    const key = e.key;
+    if (key >= '0' && key <= '9')            { e.preventDefault(); calcPress(key); return; }
+    if (key === '.')                          { e.preventDefault(); calcPress('.'); return; }
+    if (key === '+')                          { e.preventDefault(); calcPress('+'); return; }
+    if (key === '-')                          { e.preventDefault(); calcPress('-'); return; }
+    if (key === '*')                          { e.preventDefault(); calcPress('×'); return; }
+    if (key === '/')                          { e.preventDefault(); calcPress('÷'); return; }
+    if (key === '(' || key === ')')           { e.preventDefault(); calcPress(key); return; }
+    if (key === 'Enter')                      { e.preventDefault(); calcPress('='); return; }
+    if (key === 'Backspace')                  { e.preventDefault(); calcPress('←'); return; }
+    if (key === 'Escape' || key === 'Delete') { e.preventDefault(); calcPress('C'); return; }
+  }
+
   const calcDisplay = calcShowResult ? calcResult : (calcExpr || '0');
 
   // ── Render ──
@@ -692,7 +707,7 @@ export default function SalesPage() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
                       <thead>
                         <tr>
-                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅비용', '마케팅비율(%)', '순이익'].map(h => (
+                          {['월', '총매출', '스토어팜', '카페24', '기타', '마케팅비용', '마케팅비율(%)', ...(tab === 'innerpium' ? ['순이익'] : [])].map(h => (
                             <th key={h} style={{
                               padding: '8px 12px', textAlign: h === '월' ? 'left' : 'right',
                               background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
@@ -727,10 +742,12 @@ export default function SalesPage() {
                               color: s.total_sales > 0 ? mktRatioColor(s.mktRatio) : 'var(--text3)' }}>
                               {s.total_sales > 0 ? pctStr(s.mktRatio, 1) : '-'}
                             </td>
-                            <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, fontFamily: "'DM Mono',monospace",
-                              color: s.net_profit >= 0 ? '#10b981' : '#f43f5e' }}>
-                              {s.net_profit.toLocaleString('ko-KR')}
-                            </td>
+                            {tab === 'innerpium' && (
+                              <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, fontFamily: "'DM Mono',monospace",
+                                color: s.net_profit >= 0 ? '#10b981' : '#f43f5e' }}>
+                                {s.net_profit.toLocaleString('ko-KR')}
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -741,7 +758,7 @@ export default function SalesPage() {
             )}
 
             {/* 분석 섹션 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: tab === 'innerpium' ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12 }}>
 
               {/* 마케팅비율 월별 라인차트 */}
               <div className="card">
@@ -783,7 +800,9 @@ export default function SalesPage() {
                       <ResponsiveContainer width="100%" height={110}>
                         <PieChart>
                           <Pie data={pieData} cx="50%" cy="50%" outerRadius={46} dataKey="value"
-                            label={({ name, value }) => pieChannelTotal > 0 ? `${name} ${((value / pieChannelTotal) * 100).toFixed(0)}%` : name}
+                            label={({ percent }: { percent?: number }) =>
+                              (percent ?? 0) >= 0.05 ? `${((percent ?? 0) * 100).toFixed(0)}%` : ''
+                            }
                             labelLine={false}
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             style={{ fontSize: 9 } as any}>
@@ -813,8 +832,8 @@ export default function SalesPage() {
                 </div>
               </div>
 
-              {/* 월별 순이익 표 */}
-              <div className="card">
+              {/* 월별 순이익 표 — 이너피움만 */}
+              {tab === 'innerpium' && <div className="card">
                 <div className="card-head">
                   <div className="card-title">▤ 월별 순이익</div>
                 </div>
@@ -850,7 +869,7 @@ export default function SalesPage() {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div>}
             </div>
 
             {/* 일별 데이터 테이블 */}
@@ -965,9 +984,13 @@ export default function SalesPage() {
               </div>
             </div>
 
-            <div className="card">
+            <div className="card" ref={calcRef} tabIndex={0}
+              onClick={() => calcRef.current?.focus()}
+              onKeyDown={handleCalcKeyDown}
+              style={{ outline: 'none' }}>
               <div className="card-head">
                 <div className="card-title" style={{ fontSize: 12 }}>⊞ 계산기</div>
+                <span style={{ fontSize: 9, color: 'var(--text3)' }}>클릭 후 키보드 입력 가능</span>
               </div>
               <div className="card-body" style={{ padding: '8px 10px' }}>
                 <div style={{
