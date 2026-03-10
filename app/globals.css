@@ -975,10 +975,12 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   font-size: 12px; letter-spacing: -1px; color: var(--text3); flex-shrink: 0;
   user-select: none; line-height: 1; padding: 0 2px;
 }
-.dp-drag-over { outline: 2px solid var(--rose); outline-offset: -2px; }
+.dp-dragging { opacity: 0.35; }
+.dp-drag-over { border-top: 2px solid var(--rose) !important; }
 .dp-action-row {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 12px; border-radius: 8px; background: var(--surface2);
+  border-top: 2px solid transparent;
 }
 .dp-action-check { width: 15px; height: 15px; cursor: pointer; accent-color: var(--rose); flex-shrink: 0; }
 .dp-action-text {
