@@ -16,7 +16,7 @@ const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; 
   { tab: 'settlement', icon: '₩', label: '정산/발주' },
   { tab: 'projects', icon: '◉', label: '프로젝트/캠페인', section: 'Brand' },
   { tab: 'meta', icon: '◈', label: '메타 광고' },
-  { tab: 'calendar', icon: '◷', label: '일정/캘린더' },
+  { tab: 'personal', icon: '📝', label: '개인 노트' },
   { tab: 'team', icon: '◎', label: '팀원 관리', section: 'Team' },
   { tab: 'memo', icon: '✎', label: '메모장', section: 'Note' },
 ];
