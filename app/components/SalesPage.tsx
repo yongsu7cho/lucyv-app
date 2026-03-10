@@ -58,7 +58,7 @@ const INNERPIUM_COLS: ColDef[] = [
   { field: 'brand_qty',      label: '유산균수량' },
   { field: 'event',          label: 'EVENT' },
   { field: 'budget',         label: '설정금액' },
-  { field: 'marketing_total',label: '마케팅비용' },
+  { field: 'marketing_total',label: '마케팅총금액비용' },
   { field: 'inflow_24',      label: '유입(24)' },
   { field: 'inflow_n',       label: '유입(N)' },
   { field: 'inflow_cost',    label: '유입비용',      auto: true },
@@ -82,7 +82,7 @@ const AQUACRC_COLS: ColDef[] = [
   { field: 'brand_qty',      label: '클렌저수량' },
   { field: 'event',          label: 'EVENT' },
   { field: 'budget',         label: '설정금액' },
-  { field: 'marketing_total',label: '마케팅비용' },
+  { field: 'marketing_total',label: '마케팅총금액비용' },
   { field: 'inflow_24',      label: '유입(24)' },
   { field: 'inflow_n',       label: '유입(N)' },
   { field: 'inflow_cost',    label: '유입비용',       auto: true },
@@ -122,7 +122,7 @@ function money(v: number | null): string {
 }
 
 function pctStr(v: number): string {
-  return isNaN(v) || !isFinite(v) ? '-' : `${v.toFixed(2)}%`;
+  return isNaN(v) || !isFinite(v) ? '-' : `${v.toFixed(1)}%`;
 }
 
 function fmtDate(s: string): string {
@@ -139,10 +139,17 @@ function isEmptyRow(r: BrandSaleRow): boolean {
 function dispCell(row: BrandSaleRow, col: ColDef): string {
   const v = row[col.field];
   if (v == null || v === '') return '-';
-  if (col.field === 'date')            return String(v);
-  if (col.field === 'conversion_rate') return `${Number(v).toFixed(2)}%`;
-  if (col.field === 'inflow_cost')     return Math.round(Number(v)).toLocaleString('ko-KR');
-  return Number(v).toLocaleString('ko-KR');
+  if (col.field === 'date') return String(v);
+  if (col.field === 'conversion_rate') {
+    const n = Number(v);
+    return isNaN(n) || !isFinite(n) ? '-' : `${n.toFixed(1)}%`;
+  }
+  if (col.field === 'inflow_cost') {
+    const n = Math.round(Number(v));
+    return isNaN(n) ? '-' : n.toLocaleString('ko-KR');
+  }
+  const n = Number(v);
+  return isNaN(n) ? '-' : n.toLocaleString('ko-KR');
 }
 
 function calcAutoFields(row: BrandSaleRow, brand: Brand): BrandSaleRow {
@@ -156,9 +163,9 @@ function calcAutoFields(row: BrandSaleRow, brand: Brand): BrandSaleRow {
   // inflow_cost = marketing_total / (inflow_24 + inflow_n)  [integer]
   const inflowSum = (r.inflow_24 || 0) + (r.inflow_n || 0);
   r.inflow_cost = inflowSum > 0 ? Math.round((r.marketing_total || 0) / inflowSum) : null;
-  // conversion_rate = purchase_count / inflow_24 * 100  [%]
+  // conversion_rate = purchase_count / inflow_24 * 100  [소수점 1자리 %]
   r.conversion_rate = (r.inflow_24 || 0) > 0
-    ? Number(((r.purchase_count || 0) / r.inflow_24! * 100).toFixed(2))
+    ? Number(((r.purchase_count || 0) / r.inflow_24! * 100).toFixed(1))
     : null;
   return r;
 }
@@ -215,8 +222,10 @@ export default function SalesPage() {
       .from('brand_sales')
       .select('*')
       .eq('brand', brand)
+      .or('total_revenue.gt.0,store_farm.not.is.null,cafe24.not.is.null,other.not.is.null,sinsegae_v.not.is.null,other_w.not.is.null')
       .order('date', { ascending: false });
     if (!err && data) {
+      // client-side fallback filter
       setRows((data as BrandSaleRow[]).filter(r => !isEmptyRow(r)));
     }
     setLoading(false);
