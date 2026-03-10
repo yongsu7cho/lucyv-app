@@ -44,74 +44,144 @@ function g(raw: RawRow, key: string): string {
   return String(raw[key] ?? '').trim();
 }
 
-function mapRow(platform: Platform, raw: RawRow): OrderRow {
-  const row = baseRow();
-  row.기타 = platform;
+/* ── Option / bracket parsing ── */
+
+/** 상품명 맨 앞 [태그] 추출 (숫자만인 경우 제외) */
+function extractBracketTag(s: string): string {
+  const m = s.match(/^\[([^\]]+)\]/);
+  if (!m) return '';
+  const content = m[1].trim();
+  return /^\d+$/.test(content) ? '' : content;
+}
+
+/** 옵션문자열 → [{name, qty}] 분리
+ *  - 콜론 앞 카테고리명 제거
+ *  - N+M개 합산
+ *  - 괄호 안 % 항목 무시
+ *  - 개+ / 장+ 경계로 여러 품목 분리
+ */
+function parseOptionItems(optStr: string): { name: string; qty: number }[] {
+  if (!optStr) return [];
+
+  // 콜론 앞 제거
+  const stripped = optStr.includes(':')
+    ? optStr.split(':').slice(1).join(':').trim()
+    : optStr.trim();
+
+  // 괄호 분리
+  const parenStart = stripped.indexOf('(');
+  let main = stripped;
+  let parenContent = '';
+  if (parenStart !== -1) {
+    const parenEnd = stripped.lastIndexOf(')');
+    if (parenEnd > parenStart) {
+      main = stripped.slice(0, parenStart).trim();
+      parenContent = stripped.slice(parenStart + 1, parenEnd).trim();
+      if (parenContent.includes(':'))
+        parenContent = parenContent.split(':').slice(1).join(':').trim();
+    }
+  }
+
+  function parseParts(text: string): { name: string; qty: number }[] {
+    // 개+ 또는 장+ 경계를 \x00 으로 치환 후 분리
+    const parts = text.replace(/([개장])\+/g, '$1\x00').split('\x00');
+    const out: { name: string; qty: number }[] = [];
+    for (const raw of parts) {
+      const p = raw.trim();
+      if (!p || p.includes('%')) continue;
+      const mGae = p.match(/^(.+?)\s+(\d+(?:\+\d+)*)개\s*$/);
+      if (mGae) {
+        out.push({ name: mGae[1].trim(), qty: mGae[2].split('+').reduce((s, n) => s + parseInt(n, 10), 0) });
+        continue;
+      }
+      const mJang = p.match(/^(.+?)\s*(\d+)장\s*$/);
+      if (mJang) out.push({ name: mJang[1].trim(), qty: parseInt(mJang[2], 10) });
+    }
+    return out;
+  }
+
+  return [...parseParts(main), ...parseParts(parenContent)];
+}
+
+function mapRows(platform: Platform, raw: RawRow): OrderRow[] {
+  const base = baseRow();
+  base.기타 = platform;
   if (platform === '카페24') {
-    row.받는사람 = g(raw, '수령인');
-    row.받는사람전화번호 = g(raw, '수령인 휴대전화');
-    row.받는사람핸드폰 = g(raw, '수령인 휴대전화');
-    row.우편 = g(raw, '수령인 우편번호');
-    row.받는사람주소 = g(raw, '수령인 주소(전체)');
-    row.수량 = g(raw, '수량');
-    row.품목명 = g(raw, '주문상품명(옵션포함)');
-    row.고객주문번호 = g(raw, '주문번호');
-    row.배송메모 = g(raw, '배송메시지');
+    base.받는사람 = g(raw, '수령인');
+    base.받는사람전화번호 = g(raw, '수령인 휴대전화');
+    base.받는사람핸드폰 = g(raw, '수령인 휴대전화');
+    base.우편 = g(raw, '수령인 우편번호');
+    base.받는사람주소 = g(raw, '수령인 주소(전체)');
+    base.고객주문번호 = g(raw, '주문번호');
+    base.배송메모 = g(raw, '배송메시지');
+    const fullName = g(raw, '주문상품명(옵션포함)');
+    const tag = extractBracketTag(fullName);
+    if (tag) base.기타 = tag;
+    const rawQty = g(raw, '수량');
+    const items = parseOptionItems(fullName);
+    if (items.length === 0) return [{ ...base, 품목명: fullName, 수량: rawQty }];
+    return items.map(it => ({ ...base, 품목명: it.name, 수량: String(it.qty) }));
   } else if (platform === '스마트스토어') {
-    row.받는사람 = g(raw, '수취인명');
-    row.받는사람전화번호 = g(raw, '수취인연락처1');
-    row.받는사람핸드폰 = g(raw, '수취인연락처1');
-    row.우편 = g(raw, '우편번호');
-    row.받는사람주소 = g(raw, '통합배송지');
-    row.수량 = g(raw, '수량');
-    row.품목명 = g(raw, '옵션정보') || g(raw, '상품명');
-    row.고객주문번호 = g(raw, '주문번호');
-    row.배송메모 = g(raw, '배송메세지');
+    base.받는사람 = g(raw, '수취인명');
+    base.받는사람전화번호 = g(raw, '수취인연락처1');
+    base.받는사람핸드폰 = g(raw, '수취인연락처1');
+    base.우편 = g(raw, '우편번호');
+    base.받는사람주소 = g(raw, '통합배송지');
+    base.고객주문번호 = g(raw, '주문번호');
+    base.배송메모 = g(raw, '배송메세지');
+    const prodName = g(raw, '상품명');
+    const tag = extractBracketTag(prodName);
+    if (tag) base.기타 = tag;
+    const rawQty = g(raw, '수량');
+    const optStr = g(raw, '옵션정보') || prodName;
+    const items = parseOptionItems(optStr);
+    if (items.length === 0) return [{ ...base, 품목명: prodName, 수량: rawQty }];
+    return items.map(it => ({ ...base, 품목명: it.name, 수량: String(it.qty) }));
   } else if (platform === '쿠팡') {
-    row.받는사람 = g(raw, '수취인이름');
-    row.받는사람전화번호 = g(raw, '수취인전화번호');
-    row.받는사람핸드폰 = g(raw, '수취인전화번호');
-    row.우편 = g(raw, '우편번호');
-    row.받는사람주소 = g(raw, '수취인 주소');
-    row.수량 = g(raw, '구매수(수량)');
-    row.품목명 = g(raw, '등록상품명');
-    row.고객주문번호 = g(raw, '주문번호');
-    row.배송메모 = g(raw, '배송메세지');
+    base.받는사람 = g(raw, '수취인이름');
+    base.받는사람전화번호 = g(raw, '수취인전화번호');
+    base.받는사람핸드폰 = g(raw, '수취인전화번호');
+    base.우편 = g(raw, '우편번호');
+    base.받는사람주소 = g(raw, '수취인 주소');
+    base.수량 = g(raw, '구매수(수량)');
+    base.품목명 = g(raw, '등록상품명');
+    base.고객주문번호 = g(raw, '주문번호');
+    base.배송메모 = g(raw, '배송메세지');
   } else if (platform === '신세계V') {
-    row.받는사람 = g(raw, '수취인명');
-    row.받는사람전화번호 = g(raw, '수취인연락처');
-    row.받는사람핸드폰 = g(raw, '수취인연락처');
-    row.우편 = g(raw, '수취인우편번호');
-    row.받는사람주소 = [g(raw, '수취인기본주소'), g(raw, '수취인상세주소')].filter(Boolean).join(' ');
-    row.수량 = g(raw, '수량');
-    row.품목명 = g(raw, '상품명');
-    row.고객주문번호 = g(raw, '주문번호');
-    row.배송메모 = g(raw, '배송메모');
+    base.받는사람 = g(raw, '수취인명');
+    base.받는사람전화번호 = g(raw, '수취인연락처');
+    base.받는사람핸드폰 = g(raw, '수취인연락처');
+    base.우편 = g(raw, '수취인우편번호');
+    base.받는사람주소 = [g(raw, '수취인기본주소'), g(raw, '수취인상세주소')].filter(Boolean).join(' ');
+    base.수량 = g(raw, '수량');
+    base.품목명 = g(raw, '상품명');
+    base.고객주문번호 = g(raw, '주문번호');
+    base.배송메모 = g(raw, '배송메모');
   } else if (platform === '무신사') {
-    row.고객주문번호 = g(raw, '0');
-    row.배송메모 = g(raw, '1');
-    row.받는사람 = g(raw, '3');
-    row.우편 = g(raw, '4');
-    row.받는사람주소 = [g(raw, '6'), g(raw, '7')].filter(Boolean).join(' ');
-    row.받는사람전화번호 = g(raw, '9');
-    row.받는사람핸드폰 = g(raw, '9');
+    base.고객주문번호 = g(raw, '0');
+    base.배송메모 = g(raw, '1');
+    base.받는사람 = g(raw, '3');
+    base.우편 = g(raw, '4');
+    base.받는사람주소 = [g(raw, '6'), g(raw, '7')].filter(Boolean).join(' ');
+    base.받는사람전화번호 = g(raw, '9');
+    base.받는사람핸드폰 = g(raw, '9');
     const rawProduct = g(raw, '10');
     const prodName = rawProduct.replace(/^\[\d+\]/, '').trim();
     const option = g(raw, '11');
-    row.품목명 = option && option !== 'NONE' ? `${prodName} / ${option}` : prodName;
-    row.수량 = g(raw, '12');
+    base.품목명 = option && option !== 'NONE' ? `${prodName} / ${option}` : prodName;
+    base.수량 = g(raw, '12');
   } else if (platform === 'W컨셉') {
-    row.받는사람 = g(raw, '수취인');
-    row.받는사람전화번호 = g(raw, '수취인연락처1');
-    row.받는사람핸드폰 = g(raw, '수취인연락처2') || g(raw, '수취인연락처1');
-    row.우편 = g(raw, '수취인우편번호');
-    row.받는사람주소 = g(raw, '배송지');
-    row.수량 = g(raw, '수량');
-    row.품목명 = g(raw, '옵션1') || g(raw, '상품명');
-    row.고객주문번호 = g(raw, '주문번호');
-    row.배송메모 = g(raw, '배송메모');
+    base.받는사람 = g(raw, '수취인');
+    base.받는사람전화번호 = g(raw, '수취인연락처1');
+    base.받는사람핸드폰 = g(raw, '수취인연락처2') || g(raw, '수취인연락처1');
+    base.우편 = g(raw, '수취인우편번호');
+    base.받는사람주소 = g(raw, '배송지');
+    base.수량 = g(raw, '수량');
+    base.품목명 = g(raw, '옵션1') || g(raw, '상품명');
+    base.고객주문번호 = g(raw, '주문번호');
+    base.배송메모 = g(raw, '배송메모');
   }
-  return row;
+  return [base];
 }
 
 /* ── Parsers ── */
@@ -282,7 +352,7 @@ export default function OrderPage() {
       if (rawRows.length === 0) {
         setError('데이터를 읽을 수 없습니다. 파일 형식을 확인해주세요.');
       } else {
-        const mapped = rawRows.map(r => mapRow(platform, r));
+        const mapped = rawRows.flatMap(r => mapRows(platform, r));
         setEntries(prev => [...prev, { platform, fileName: file.name, rows: mapped }]);
       }
     } catch {
