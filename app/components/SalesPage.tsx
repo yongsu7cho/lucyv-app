@@ -112,7 +112,11 @@ const CHART_COLORS: Record<string, string> = {
 const PIE_COLORS = ['#10b981', '#3b82f6', '#94a3b8'];
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm   = String(d.getMonth() + 1).padStart(2, '0');
+  const dd   = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function toNum(s: string): number | null {
@@ -355,14 +359,21 @@ export default function SalesPage() {
 
   async function handleCreateRow() {
     if (!formDate) return;
+    // 날짜 형식 YYYY-MM-DD 보장
+    const dateVal = formDate.slice(0, 10);
     setSaving(true);
     const { data, error: err } = await supabase
       .from('brand_sales')
-      .insert({ brand: tab, date: formDate })
+      .upsert({ brand: tab, date: dateVal }, { onConflict: 'brand,date' })
       .select()
       .single();
     if (!err && data) {
-      setRows(prev => [data as BrandSaleRow, ...prev]);
+      const row = data as BrandSaleRow;
+      // 이미 존재하면 업데이트, 없으면 prepend
+      setRows(prev => {
+        const exists = prev.some(r => r.id === row.id);
+        return exists ? prev.map(r => r.id === row.id ? row : r) : [row, ...prev];
+      });
       setShowForm(false);
     }
     setSaving(false);
