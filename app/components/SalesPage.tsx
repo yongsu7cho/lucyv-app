@@ -214,6 +214,12 @@ interface MktRatioPayload {
   total_sales: number;
   marketing_total: number;
 }
+function MktRatioDot({ cx, cy, payload }: { cx?: number; cy?: number; payload?: MktRatioPayload }) {
+  if (cx == null || cy == null) return null;
+  const ratio = payload?.['마케팅비율(%)'] ?? 0;
+  return <circle cx={cx} cy={cy} r={3.5} fill={mktRatioColor(ratio)} stroke="none" />;
+}
+
 function MktRatioTooltip({ active, payload }: { active?: boolean; payload?: { payload: MktRatioPayload }[] }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
@@ -244,6 +250,7 @@ export default function SalesPage() {
 
   const [tab,     setTab]     = useState<Brand>('innerpium');
   const [rows,    setRows]    = useState<BrandSaleRow[]>([]);
+  const [allRows, setAllRows] = useState<BrandSaleRow[]>([]); // 필터 전 전체 데이터 (마케팅비율 계산용)
   const [loading, setLoading] = useState(true);
 
   const [editCell,    setEditCell]    = useState<{ rowId: number; field: keyof BrandSaleRow } | null>(null);
@@ -275,11 +282,13 @@ export default function SalesPage() {
       .select('*')
       .eq('brand', brand)
       .order('date', { ascending: false });
-    const filtered = (data as BrandSaleRow[])?.filter(row =>
+    const raw      = (data as BrandSaleRow[]) ?? [];
+    const filtered = raw.filter(row =>
       row.storefarm !== null ||
       row.cafe24    !== null ||
       (row.total_sales ?? 0) > 0
-    ) ?? [];
+    );
+    setAllRows(raw);     // 마케팅비율 계산: 필터 전 전체 데이터
     setRows(filtered);
     // 가장 최근 데이터 날짜로 자동 설정
     if (filtered.length > 0) {
@@ -359,17 +368,27 @@ export default function SalesPage() {
   // 월별 요약
   const monthlySummary = buildMonthlySummary(rows);
 
-  // 분석: 마케팅비율 추이 — 월별 누적, total_sales > 0인 월만
-  // 툴팁과 그래프 점 모두 동일한 값 사용 (한 곳에서 계산)
-  const mktRatioChartData = [...monthlySummary]
-    .filter(s => s.total_sales > 0)
-    .reverse()
-    .map(s => ({
-      month:            s.month.slice(5) + '월',
-      '마케팅비율(%)':  Number((s.marketing_total / s.total_sales * 100).toFixed(1)),
-      total_sales:      s.total_sales,
-      marketing_total:  s.marketing_total,
-    }));
+  // 분석: 마케팅비율 추이 — allRows(필터 전 전체)로 월별 직접 집계
+  // 이렇게 해야 storefarm/cafe24/total_sales가 없는 날의 마케팅비도 포함됨
+  const mktRatioChartData = (() => {
+    const map = new Map<string, { mkt: number; sales: number }>();
+    for (const r of allRows) {
+      const month = r.date.slice(0, 7);
+      if (!map.has(month)) map.set(month, { mkt: 0, sales: 0 });
+      const s = map.get(month)!;
+      s.mkt   += r.marketing_total || 0;
+      s.sales += r.total_sales     || 0;
+    }
+    return [...map.entries()]
+      .filter(([, s]) => s.sales > 0)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, s]) => ({
+        month:           month.slice(5) + '월',
+        '마케팅비율(%)': Number((s.mkt / s.sales * 100).toFixed(1)),
+        total_sales:     s.sales,
+        marketing_total: s.mkt,
+      }));
+  })();
 
   // 분석: 선택한 월 채널 파이 (null → 0 처리, 채널 합계 기준으로 비율 계산)
   const pieChannelTotal = (kpiStorefarm || 0) + (kpiCafe24 || 0) + (kpiEtc || 0);
@@ -737,7 +756,8 @@ export default function SalesPage() {
                       <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
                         tickFormatter={v => `${v}%`} domain={[0, 100]} width={32} />
                       <Tooltip content={<MktRatioTooltip />} />
-                      <Line type="monotone" dataKey="마케팅비율(%)" stroke="#f43f5e" strokeWidth={2} dot={{ r: 2, fill: '#f43f5e' }} />
+                      <Line type="monotone" dataKey="마케팅비율(%)" stroke="#94a3b8" strokeWidth={2}
+                        dot={<MktRatioDot />} activeDot={{ r: 5 }} />
                     </LineChart>
                   </ResponsiveContainer>
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 6, fontSize: 9 }}>
