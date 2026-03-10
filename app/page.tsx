@@ -223,7 +223,7 @@ export default function Home() {
     if (!mounted) return;
     const params = new URLSearchParams(window.location.search);
     if (params.get('gcal') === 'connected' || params.has('error')) {
-      setActiveTab('calendar');
+      setActiveTab('personal');
     }
   }, [mounted]);
 
@@ -297,7 +297,6 @@ export default function Home() {
             <Dashboard
               influencers={influencers}
               projects={projects}
-              events={events}
               settlements={settlements}
               members={members}
               onInfluencerClick={(id) => {
@@ -320,11 +319,8 @@ export default function Home() {
               setProjects={setProjects}
             />
           )}
-          {activeTab === 'calendar' && (
-            <CalendarPage
-              events={events}
-              setEvents={setEvents}
-            />
+          {activeTab === 'personal' && (
+            <CalendarPage />
           )}
           {activeTab === 'settlement' && (
             <SettlementPage

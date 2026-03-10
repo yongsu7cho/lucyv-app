@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line,
@@ -16,20 +16,20 @@ interface BrandSaleRow {
   date: string;
   store_farm: number | null;
   cafe24: number | null;
-  other: number | null;         // 기타 (이너피움)
-  sinsegae_v: number | null;    // 신세계V (아쿠아크)
-  other_w: number | null;       // 기타(더블유) (아쿠아크)
-  total_revenue: number | null; // 자동계산
-  brand_sales: number | null;   // 유산균매출 / 클렌저매출
+  other: number | null;
+  sinsegae_v: number | null;
+  other_w: number | null;
+  total_revenue: number | null;
+  brand_sales: number | null;
   purchase_count: number | null;
-  brand_qty: number | null;     // 유산균수량 / 클렌저수량
+  brand_qty: number | null;
   event: number | null;
   budget: number | null;
   marketing_total: number | null;
   inflow_24: number | null;
   inflow_n: number | null;
-  inflow_cost: number | null;
-  conversion_rate: number | null;
+  inflow_cost: number | null;       // auto: marketing_total / (inflow_24 + inflow_n)
+  conversion_rate: number | null;   // auto: purchase_count / inflow_24 * 100
   signup: number | null;
   wishlist: number | null;
   kakao: number | null;
@@ -38,156 +38,60 @@ interface BrandSaleRow {
   created_at?: string;
 }
 
-type FormState = Omit<BrandSaleRow, 'id' | 'created_at'>;
-type FormStrings = Record<keyof FormState, string>;
-
 /* ─────────────────── Column Definitions ─────────────────── */
-interface ColDef { field: keyof BrandSaleRow; label: string; bold?: boolean; }
+interface ColDef {
+  field: keyof BrandSaleRow;
+  label: string;
+  bold?: boolean;
+  auto?: boolean;   // auto-calculated, read-only
+  noEdit?: boolean; // not inline-editable
+}
 
 const INNERPIUM_COLS: ColDef[] = [
-  { field: 'date', label: '날짜' },
-  { field: 'store_farm', label: '스토어팜' },
-  { field: 'cafe24', label: '카페24' },
-  { field: 'other', label: '기타' },
-  { field: 'total_revenue', label: '총매출', bold: true },
-  { field: 'brand_sales', label: '유산균매출' },
+  { field: 'date',           label: '날짜',         noEdit: true },
+  { field: 'store_farm',     label: '스토어팜' },
+  { field: 'cafe24',         label: '카페24' },
+  { field: 'other',          label: '기타' },
+  { field: 'total_revenue',  label: '총매출',        bold: true, auto: true },
+  { field: 'brand_sales',    label: '유산균매출' },
   { field: 'purchase_count', label: '구매건' },
-  { field: 'brand_qty', label: '유산균수량' },
-  { field: 'event', label: 'EVENT' },
-  { field: 'budget', label: '설정금액' },
-  { field: 'marketing_total', label: '마케팅총금액비용' },
-  { field: 'inflow_24', label: '유입(24)' },
-  { field: 'inflow_n', label: '유입(N)' },
-  { field: 'inflow_cost', label: '유입비용' },
-  { field: 'conversion_rate', label: '전환률' },
-  { field: 'signup', label: '회원가입' },
-  { field: 'wishlist', label: '찜' },
-  { field: 'kakao', label: '카카오' },
-  { field: 'insta', label: '인스타' },
-  { field: 'insta_total', label: '인스타총' },
+  { field: 'brand_qty',      label: '유산균수량' },
+  { field: 'event',          label: 'EVENT' },
+  { field: 'budget',         label: '설정금액' },
+  { field: 'marketing_total',label: '마케팅총금액비용' },
+  { field: 'inflow_24',      label: '유입(24)' },
+  { field: 'inflow_n',       label: '유입(N)' },
+  { field: 'inflow_cost',    label: '유입비용',      auto: true },
+  { field: 'conversion_rate',label: '전환률',        auto: true },
+  { field: 'signup',         label: '회원가입' },
+  { field: 'wishlist',       label: '찜' },
+  { field: 'kakao',          label: '카카오' },
+  { field: 'insta',          label: '인스타' },
+  { field: 'insta_total',    label: '인스타총' },
 ];
 
 const AQUACRC_COLS: ColDef[] = [
-  { field: 'date', label: '날짜' },
-  { field: 'store_farm', label: '스토어팜' },
-  { field: 'cafe24', label: '카페24' },
-  { field: 'sinsegae_v', label: '신세계V' },
-  { field: 'other_w', label: '기타(더블유)' },
-  { field: 'total_revenue', label: '총매출', bold: true },
-  { field: 'brand_sales', label: '클렌저매출' },
+  { field: 'date',           label: '날짜',          noEdit: true },
+  { field: 'store_farm',     label: '스토어팜' },
+  { field: 'cafe24',         label: '카페24' },
+  { field: 'sinsegae_v',     label: '신세계V' },
+  { field: 'other_w',        label: '기타(더블유)' },
+  { field: 'total_revenue',  label: '총매출',         bold: true, auto: true },
+  { field: 'brand_sales',    label: '클렌저매출' },
   { field: 'purchase_count', label: '구매건' },
-  { field: 'brand_qty', label: '클렌저수량' },
-  { field: 'event', label: 'EVENT' },
-  { field: 'budget', label: '설정금액' },
-  { field: 'marketing_total', label: '마케팅총금액비용' },
-  { field: 'inflow_24', label: '유입(24)' },
-  { field: 'inflow_n', label: '유입(N)' },
-  { field: 'inflow_cost', label: '유입비용' },
-  { field: 'conversion_rate', label: '전환률' },
-  { field: 'signup', label: '회원가입' },
-  { field: 'wishlist', label: '찜' },
-  { field: 'kakao', label: '카카오' },
-  { field: 'insta', label: '인스타' },
-  { field: 'insta_total', label: '인스타총' },
-];
-
-/* ─────────────────── Form Field Groups ─────────────────── */
-interface FieldDef { key: keyof FormStrings; label: string; readOnly?: boolean; decimal?: boolean; }
-interface FieldGroup { title: string; fields: FieldDef[]; }
-
-const INNERPIUM_GROUPS: FieldGroup[] = [
-  {
-    title: '매출 채널',
-    fields: [
-      { key: 'store_farm', label: '스토어팜' },
-      { key: 'cafe24', label: '카페24' },
-      { key: 'other', label: '기타' },
-      { key: 'total_revenue', label: '총매출', readOnly: true },
-    ],
-  },
-  {
-    title: '상세 매출',
-    fields: [
-      { key: 'brand_sales', label: '유산균매출' },
-      { key: 'purchase_count', label: '구매건' },
-      { key: 'brand_qty', label: '유산균수량' },
-    ],
-  },
-  {
-    title: '마케팅',
-    fields: [
-      { key: 'event', label: 'EVENT (광고수)' },
-      { key: 'budget', label: '설정금액' },
-      { key: 'marketing_total', label: '마케팅총금액비용' },
-    ],
-  },
-  {
-    title: '유입 / 전환',
-    fields: [
-      { key: 'inflow_24', label: '유입(24)' },
-      { key: 'inflow_n', label: '유입(N)' },
-      { key: 'inflow_cost', label: '유입비용' },
-      { key: 'conversion_rate', label: '전환률 (%)', decimal: true },
-    ],
-  },
-  {
-    title: '기타 지표',
-    fields: [
-      { key: 'signup', label: '회원가입' },
-      { key: 'wishlist', label: '찜' },
-      { key: 'kakao', label: '카카오' },
-      { key: 'insta', label: '인스타' },
-      { key: 'insta_total', label: '인스타총' },
-    ],
-  },
-];
-
-const AQUACRC_GROUPS: FieldGroup[] = [
-  {
-    title: '매출 채널',
-    fields: [
-      { key: 'store_farm', label: '스토어팜' },
-      { key: 'cafe24', label: '카페24' },
-      { key: 'sinsegae_v', label: '신세계V' },
-      { key: 'other_w', label: '기타(더블유)' },
-      { key: 'total_revenue', label: '총매출', readOnly: true },
-    ],
-  },
-  {
-    title: '상세 매출',
-    fields: [
-      { key: 'brand_sales', label: '클렌저매출' },
-      { key: 'purchase_count', label: '구매건' },
-      { key: 'brand_qty', label: '클렌저수량' },
-    ],
-  },
-  {
-    title: '마케팅',
-    fields: [
-      { key: 'event', label: 'EVENT (광고수)' },
-      { key: 'budget', label: '설정금액' },
-      { key: 'marketing_total', label: '마케팅총금액비용' },
-    ],
-  },
-  {
-    title: '유입 / 전환',
-    fields: [
-      { key: 'inflow_24', label: '유입(24)' },
-      { key: 'inflow_n', label: '유입(N)' },
-      { key: 'inflow_cost', label: '유입비용' },
-      { key: 'conversion_rate', label: '전환률 (%)', decimal: true },
-    ],
-  },
-  {
-    title: '기타 지표',
-    fields: [
-      { key: 'signup', label: '회원가입' },
-      { key: 'wishlist', label: '찜' },
-      { key: 'kakao', label: '카카오' },
-      { key: 'insta', label: '인스타' },
-      { key: 'insta_total', label: '인스타총' },
-    ],
-  },
+  { field: 'brand_qty',      label: '클렌저수량' },
+  { field: 'event',          label: 'EVENT' },
+  { field: 'budget',         label: '설정금액' },
+  { field: 'marketing_total',label: '마케팅총금액비용' },
+  { field: 'inflow_24',      label: '유입(24)' },
+  { field: 'inflow_n',       label: '유입(N)' },
+  { field: 'inflow_cost',    label: '유입비용',       auto: true },
+  { field: 'conversion_rate',label: '전환률',         auto: true },
+  { field: 'signup',         label: '회원가입' },
+  { field: 'wishlist',       label: '찜' },
+  { field: 'kakao',          label: '카카오' },
+  { field: 'insta',          label: '인스타' },
+  { field: 'insta_total',    label: '인스타총' },
 ];
 
 /* ─────────────────── Helpers ─────────────────── */
@@ -212,13 +116,13 @@ function toNum(s: string): number | null {
 function money(v: number | null): string {
   if (!v) return '₩0';
   if (v >= 100_000_000) return `₩${(v / 100_000_000).toFixed(1)}억`;
-  if (v >= 1_000_000) return `₩${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `₩${(v / 1_000).toFixed(0)}K`;
+  if (v >= 1_000_000)   return `₩${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000)       return `₩${(v / 1_000).toFixed(0)}K`;
   return `₩${v.toLocaleString('ko-KR')}`;
 }
 
 function pctStr(v: number): string {
-  return isNaN(v) || !isFinite(v) ? '-' : `${v.toFixed(2)}%`;
+  return isNaN(v) || !isFinite(v) ? '-' : `${v.toFixed(1)}%`;
 }
 
 function fmtDate(s: string): string {
@@ -226,408 +130,349 @@ function fmtDate(s: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-function blankForm(brand: Brand): FormStrings {
-  return {
-    brand,
-    date: todayStr(),
-    store_farm: '', cafe24: '', other: '',
-    sinsegae_v: '', other_w: '',
-    total_revenue: '',
-    brand_sales: '', purchase_count: '', brand_qty: '',
-    event: '', budget: '', marketing_total: '',
-    inflow_24: '', inflow_n: '', inflow_cost: '',
-    conversion_rate: '',
-    signup: '', wishlist: '', kakao: '', insta: '', insta_total: '',
-  };
-}
-
-function rowToFormStrings(row: BrandSaleRow): FormStrings {
-  const stringify = (v: number | null) => v == null ? '' : String(v);
-  return {
-    brand: row.brand,
-    date: row.date,
-    store_farm: stringify(row.store_farm),
-    cafe24: stringify(row.cafe24),
-    other: stringify(row.other),
-    sinsegae_v: stringify(row.sinsegae_v),
-    other_w: stringify(row.other_w),
-    total_revenue: stringify(row.total_revenue),
-    brand_sales: stringify(row.brand_sales),
-    purchase_count: stringify(row.purchase_count),
-    brand_qty: stringify(row.brand_qty),
-    event: stringify(row.event),
-    budget: stringify(row.budget),
-    marketing_total: stringify(row.marketing_total),
-    inflow_24: stringify(row.inflow_24),
-    inflow_n: stringify(row.inflow_n),
-    inflow_cost: stringify(row.inflow_cost),
-    conversion_rate: stringify(row.conversion_rate),
-    signup: stringify(row.signup),
-    wishlist: stringify(row.wishlist),
-    kakao: stringify(row.kakao),
-    insta: stringify(row.insta),
-    insta_total: stringify(row.insta_total),
-  };
-}
-
-function calcTotal(f: FormStrings, brand: Brand): string {
-  const sf = parseFloat(f.store_farm) || 0;
-  const c24 = parseFloat(f.cafe24) || 0;
-  if (brand === 'innerpium') {
-    const ot = parseFloat(f.other) || 0;
-    return String(sf + c24 + ot);
-  } else {
-    const sv = parseFloat(f.sinsegae_v) || 0;
-    const ow = parseFloat(f.other_w) || 0;
-    return String(sf + c24 + sv + ow);
-  }
-}
-
-function formToRow(f: FormStrings, id?: number): Omit<BrandSaleRow, 'created_at'> {
-  return {
-    ...(id != null ? { id } : {}),
-    brand: f.brand as Brand,
-    date: f.date,
-    store_farm: toNum(f.store_farm),
-    cafe24: toNum(f.cafe24),
-    other: toNum(f.other),
-    sinsegae_v: toNum(f.sinsegae_v),
-    other_w: toNum(f.other_w),
-    total_revenue: toNum(f.total_revenue),
-    brand_sales: toNum(f.brand_sales),
-    purchase_count: toNum(f.purchase_count),
-    brand_qty: toNum(f.brand_qty),
-    event: toNum(f.event),
-    budget: toNum(f.budget),
-    marketing_total: toNum(f.marketing_total),
-    inflow_24: toNum(f.inflow_24),
-    inflow_n: toNum(f.inflow_n),
-    inflow_cost: toNum(f.inflow_cost),
-    conversion_rate: toNum(f.conversion_rate),
-    signup: toNum(f.signup),
-    wishlist: toNum(f.wishlist),
-    kakao: toNum(f.kakao),
-    insta: toNum(f.insta),
-    insta_total: toNum(f.insta_total),
-  } as Omit<BrandSaleRow, 'created_at'>;
+function isEmptyRow(r: BrandSaleRow): boolean {
+  const noChannels = !r.store_farm && !r.cafe24 && !r.other && !r.sinsegae_v && !r.other_w;
+  const noTotal    = !r.total_revenue || r.total_revenue === 0;
+  return noChannels && noTotal;
 }
 
 function dispCell(row: BrandSaleRow, col: ColDef): string {
   const v = row[col.field];
   if (v == null || v === '') return '-';
   if (col.field === 'date') return String(v);
-  if (col.field === 'conversion_rate') return `${Number(v).toFixed(2)}%`;
-  return Number(v).toLocaleString('ko-KR');
+  if (col.field === 'conversion_rate') {
+    const n = Number(v);
+    return isNaN(n) || !isFinite(n) ? '-' : `${n.toFixed(1)}%`;
+  }
+  if (col.field === 'inflow_cost') {
+    const n = Math.round(Number(v));
+    return isNaN(n) ? '-' : n.toLocaleString('ko-KR');
+  }
+  const n = Number(v);
+  return isNaN(n) ? '-' : n.toLocaleString('ko-KR');
 }
+
+function calcAutoFields(row: BrandSaleRow, brand: Brand): BrandSaleRow {
+  const r = { ...row };
+  // total_revenue
+  if (brand === 'innerpium') {
+    r.total_revenue = (r.store_farm || 0) + (r.cafe24 || 0) + (r.other || 0);
+  } else {
+    r.total_revenue = (r.store_farm || 0) + (r.cafe24 || 0) + (r.sinsegae_v || 0) + (r.other_w || 0);
+  }
+  // inflow_cost = marketing_total / (inflow_24 + inflow_n)  [integer]
+  const inflowSum = (r.inflow_24 || 0) + (r.inflow_n || 0);
+  r.inflow_cost = inflowSum > 0 ? Math.round((r.marketing_total || 0) / inflowSum) : null;
+  // conversion_rate = purchase_count / inflow_24 * 100  [소수점 1자리 %]
+  r.conversion_rate = (r.inflow_24 || 0) > 0
+    ? Number(((r.purchase_count || 0) / r.inflow_24! * 100).toFixed(1))
+    : null;
+  return r;
+}
+
+/* ─────────────────── Calculator helpers ─────────────────── */
+const CALC_ROWS = [
+  ['C', '←', '(', ')'],
+  ['7', '8', '9', '÷'],
+  ['4', '5', '6', '×'],
+  ['1', '2', '3', '-'],
+  ['0', '.', '+', '='],
+];
+const CALC_OPS   = new Set(['÷', '×', '-', '+', '(', ')']);
+const CALC_FUNCS = new Set(['C', '←', '=']);
 
 /* ─────────────────── Main Component ─────────────────── */
 export default function SalesPage() {
   const now = new Date();
-  const [tab, setTab] = useState<Brand>('innerpium');
-  const [rows, setRows] = useState<BrandSaleRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState<FormStrings>(blankForm('innerpium'));
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [filterYear, setFilterYear] = useState<string>(String(now.getFullYear()));
-  const [filterMonth, setFilterMonth] = useState<string>(String(now.getMonth() + 1).padStart(2, '0'));
 
+  // ── Core ──
+  const [tab,     setTab]     = useState<Brand>('innerpium');
+  const [rows,    setRows]    = useState<BrandSaleRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // ── Inline edit ──
+  const [editCell,  setEditCell]  = useState<{ rowId: number; field: keyof BrandSaleRow } | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [savingRows, setSavingRows] = useState<Set<number>>(new Set());
+  const inputRef    = useRef<HTMLInputElement>(null);
+  const committingRef = useRef(false);
+
+  // ── New row form ──
+  const [showForm, setShowForm] = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [formDate, setFormDate] = useState(todayStr());
+
+  // ── Download filter ──
+  const [filterYear,  setFilterYear]  = useState(String(now.getFullYear()));
+  const [filterMonth, setFilterMonth] = useState(String(now.getMonth() + 1).padStart(2, '0'));
+
+  // ── Memo ──
+  const [memo, setMemo] = useState('');
+  useEffect(() => { setMemo(localStorage.getItem(`memo-${tab}`) || ''); }, [tab]);
+
+  // ── Calculator ──
+  const [calcExpr,       setCalcExpr]       = useState('');
+  const [calcResult,     setCalcResult]     = useState('0');
+  const [calcShowResult, setCalcShowResult] = useState(false);
+
+  // ── Fetch ──
   const fetchRows = useCallback(async (brand: Brand) => {
     setLoading(true);
     const { data, error: err } = await supabase
       .from('brand_sales')
       .select('*')
       .eq('brand', brand)
+      .or('total_revenue.gt.0,store_farm.not.is.null,cafe24.not.is.null,other.not.is.null,sinsegae_v.not.is.null,other_w.not.is.null')
       .order('date', { ascending: false });
-    if (!err && data) setRows(data as BrandSaleRow[]);
+    if (!err && data) {
+      // client-side fallback filter
+      setRows((data as BrandSaleRow[]).filter(r => !isEmptyRow(r)));
+    }
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchRows(tab);
-  }, [tab, fetchRows]);
+  useEffect(() => { fetchRows(tab); }, [tab, fetchRows]);
 
-  // Auto-recalc total_revenue when channel fields change
-  function handleFieldChange(key: keyof FormStrings, value: string) {
-    setForm(prev => {
-      const next = { ...prev, [key]: value };
-      const totalKeys = tab === 'innerpium'
-        ? ['store_farm', 'cafe24', 'other']
-        : ['store_farm', 'cafe24', 'sinsegae_v', 'other_w'];
-      if (totalKeys.includes(key as string)) {
-        next.total_revenue = calcTotal(next, tab);
-      }
-      return next;
-    });
-  }
+  // Focus input when editCell changes
+  useEffect(() => { if (editCell) inputRef.current?.focus(); }, [editCell]);
 
-  function openCreate() {
-    setEditId(null);
-    setForm(blankForm(tab));
-    setError(null);
-    setShowForm(true);
-  }
+  // ── Derived ──
+  const cols        = tab === 'innerpium' ? INNERPIUM_COLS : AQUACRC_COLS;
+  const displayRows = rows.slice(0, 30);
 
-  function openEdit(row: BrandSaleRow) {
-    setEditId(row.id);
-    setForm(rowToFormStrings(row));
-    setError(null);
-    setShowForm(true);
-  }
-
-  async function handleSave() {
-    if (!form.date) { setError('날짜를 입력해주세요'); return; }
-    setSaving(true);
-    setError(null);
-    try {
-      const payload = formToRow(form, editId ?? undefined);
-      if (editId != null) {
-        const { error: err } = await supabase
-          .from('brand_sales')
-          .update(payload)
-          .eq('id', editId);
-        if (err) throw err;
-      } else {
-        const { error: err } = await supabase
-          .from('brand_sales')
-          .insert(payload);
-        if (err) throw err;
-      }
-      setShowForm(false);
-      await fetchRows(tab);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '저장 실패');
-    }
-    setSaving(false);
-  }
-
-  async function handleDelete(id: number) {
-    if (!confirm('이 행을 삭제하시겠어요?')) return;
-    setDeleting(id);
-    await supabase.from('brand_sales').delete().eq('id', id);
-    setDeleting(null);
-    await fetchRows(tab);
-  }
-
-  const cols = tab === 'innerpium' ? INNERPIUM_COLS : AQUACRC_COLS;
-  const groups = tab === 'innerpium' ? INNERPIUM_GROUPS : AQUACRC_GROUPS;
-
-  // Period filter
-  const availableYears = [...new Set(rows.map(r => r.date.slice(0, 4)))]
-    .sort().reverse();
+  const availableYears = [...new Set(rows.map(r => r.date.slice(0, 4)))].sort().reverse();
   const currentYearStr = String(now.getFullYear());
   if (!availableYears.includes(currentYearStr)) availableYears.unshift(currentYearStr);
 
-  const filteredRows = rows.filter(r => {
-    if (filterYear && !r.date.startsWith(filterYear)) return false;
+  const downloadRows = rows.filter(r => {
+    if (filterYear  && !r.date.startsWith(filterYear)) return false;
     if (filterYear && filterMonth && !r.date.startsWith(`${filterYear}-${filterMonth}`)) return false;
     return true;
   });
 
-  const kpiSub = filterYear && filterMonth
-    ? `${filterYear}.${filterMonth} · ${filteredRows.length}일`
-    : filterYear
-    ? `${filterYear}년 · ${filteredRows.length}일`
-    : `전체 · ${filteredRows.length}일`;
-
-  const sumField = (field: keyof BrandSaleRow) =>
-    filteredRows.reduce((s, r) => s + (Number(r[field]) || 0), 0);
-
+  // KPI
+  const sumField = (f: keyof BrandSaleRow) => displayRows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
   const totalRevenue = sumField('total_revenue');
-  const storeFarm = sumField('store_farm');
-  const cafe24Sum = sumField('cafe24');
-  const purchases = sumField('purchase_count');
+  const storeFarm    = sumField('store_farm');
+  const cafe24Sum    = sumField('cafe24');
+  const purchases    = sumField('purchase_count');
   const marketingSum = sumField('marketing_total');
-  const convRates = filteredRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
-  const avgConv = convRates.length > 0 ? convRates.reduce((a, b) => a + b, 0) / convRates.length : 0;
+  const convRates    = displayRows.map(r => Number(r.conversion_rate)).filter(v => v > 0);
+  const avgConv      = convRates.length > 0 ? convRates.reduce((a, b) => a + b) / convRates.length : 0;
+  const kpiSub       = `최근 ${displayRows.length}일`;
 
-  // Chart: ascending date (filtered)
-  const barKeys = tab === 'innerpium' ? ['스토어팜', '카페24', '기타'] : ['스토어팜', '카페24', '신세계V', '기타(더블유)'];
-  const chartData = [...filteredRows]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map(r => {
-      const base: Record<string, string | number> = {
-        date: fmtDate(r.date),
-        스토어팜: r.store_farm ?? 0,
-        카페24: r.cafe24 ?? 0,
-        총매출: r.total_revenue ?? 0,
-      };
-      if (tab === 'innerpium') base['기타'] = r.other ?? 0;
-      else { base['신세계V'] = r.sinsegae_v ?? 0; base['기타(더블유)'] = r.other_w ?? 0; }
-      return base;
-    });
+  // Chart
+  const barKeys   = tab === 'innerpium' ? ['스토어팜', '카페24', '기타'] : ['스토어팜', '카페24', '신세계V', '기타(더블유)'];
+  const chartData = [...displayRows].sort((a, b) => a.date.localeCompare(b.date)).map(r => {
+    const base: Record<string, string | number> = {
+      date: fmtDate(r.date), 스토어팜: r.store_farm ?? 0, 카페24: r.cafe24 ?? 0, 총매출: r.total_revenue ?? 0,
+    };
+    if (tab === 'innerpium') base['기타'] = r.other ?? 0;
+    else { base['신세계V'] = r.sinsegae_v ?? 0; base['기타(더블유)'] = r.other_w ?? 0; }
+    return base;
+  });
 
-  // Excel download
+  // ── Inline edit handlers ──
+  function startEdit(rowId: number, field: keyof BrandSaleRow) {
+    const col = cols.find(c => c.field === field);
+    if (!col || col.auto || col.noEdit) return;
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
+    const v = row[field];
+    setEditCell({ rowId, field });
+    setEditValue(v == null ? '' : String(v));
+  }
+
+  function commitEdit() {
+    if (!editCell || committingRef.current) return;
+    committingRef.current = true;
+    const { rowId, field } = editCell;
+    const value = editValue;
+    setEditCell(null);
+    setEditValue('');
+    doSave(rowId, field, value).finally(() => { committingRef.current = false; });
+  }
+
+  function cancelEdit() {
+    setEditCell(null);
+    setEditValue('');
+  }
+
+  async function doSave(rowId: number, field: keyof BrandSaleRow, value: string) {
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
+    const numVal = toNum(value);
+    if (numVal === row[field]) return; // no change
+    const updated = calcAutoFields({ ...row, [field]: numVal }, tab);
+    setRows(prev => prev.map(r => r.id === rowId ? updated : r));
+    setSavingRows(prev => new Set([...prev, rowId]));
+    try {
+      await supabase.from('brand_sales').update({
+        [field]: numVal,
+        total_revenue:   updated.total_revenue,
+        inflow_cost:     updated.inflow_cost,
+        conversion_rate: updated.conversion_rate,
+      }).eq('id', rowId);
+    } finally {
+      setSavingRows(prev => { const s = new Set(prev); s.delete(rowId); return s; });
+    }
+  }
+
+  // ── New row ──
+  async function handleCreateRow() {
+    if (!formDate) return;
+    setSaving(true);
+    const { data, error: err } = await supabase
+      .from('brand_sales')
+      .insert({ brand: tab, date: formDate })
+      .select()
+      .single();
+    if (!err && data) {
+      setRows(prev => [data as BrandSaleRow, ...prev]);
+      setShowForm(false);
+    }
+    setSaving(false);
+  }
+
+  // ── Delete ──
+  async function handleDelete(id: number) {
+    if (!confirm('이 행을 삭제하시겠어요?')) return;
+    await supabase.from('brand_sales').delete().eq('id', id);
+    setRows(prev => prev.filter(r => r.id !== id));
+  }
+
+  // ── Excel download ──
   function handleDownload() {
-    if (filteredRows.length === 0) return;
+    if (downloadRows.length === 0) return;
     const brandName = tab === 'innerpium' ? '이너피움' : '아쿠아크';
-    const period = filterYear && filterMonth
+    const period    = filterYear && filterMonth
       ? `${filterYear}_${filterMonth}`
       : filterYear || currentYearStr;
-    const filename = `${brandName}_매출_${period}.xlsx`;
-
-    const headers = cols.map(c => c.label);
-    const dataRows = filteredRows
-      .slice()
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .map(row =>
-        cols.map(c => {
-          const v = row[c.field];
-          if (v == null) return '';
-          if (c.field === 'conversion_rate') return Number(v);
-          if (c.field === 'date') return String(v);
-          return Number(v);
-        })
-      );
-
+    const filename  = `${brandName}_매출_${period}.xlsx`;
+    const headers   = cols.map(c => c.label);
+    const dataRows  = downloadRows.map(row =>
+      cols.map(c => {
+        const v = row[c.field];
+        if (v == null) return '';
+        if (c.field === 'date')            return String(v);
+        if (c.field === 'inflow_cost')     return Math.round(Number(v));
+        if (c.field === 'conversion_rate') return Number(v);
+        return Number(v);
+      })
+    );
     const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
     ws['!cols'] = cols.map(c => ({ wch: c.field === 'date' ? 12 : 14 }));
-
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, brandName);
     XLSX.writeFile(wb, filename);
   }
 
+  // ── Calculator ──
+  function calcPress(btn: string) {
+    if (btn === 'C') {
+      setCalcExpr(''); setCalcResult('0'); setCalcShowResult(false); return;
+    }
+    if (btn === '←') {
+      if (calcShowResult) { setCalcExpr(''); setCalcResult('0'); setCalcShowResult(false); }
+      else { setCalcExpr(p => p.slice(0, -1) || ''); }
+      return;
+    }
+    if (btn === '=') {
+      if (!calcExpr) return;
+      try {
+        const expr = calcExpr.replace(/×/g, '*').replace(/÷/g, '/');
+        // eslint-disable-next-line no-new-func
+        const res = Function('"use strict"; return (' + expr + ')')() as number;
+        setCalcResult(Number(res.toFixed(10)).toString());
+        setCalcShowResult(true);
+      } catch { setCalcResult('오류'); setCalcShowResult(true); }
+      return;
+    }
+    if (calcShowResult) {
+      setCalcExpr(CALC_OPS.has(btn) ? calcResult + btn : btn);
+      setCalcShowResult(false);
+      return;
+    }
+    setCalcExpr(p => p + btn);
+  }
+
+  const calcDisplay = calcShowResult ? calcResult : (calcExpr || '0');
+
+  // ── Render ──
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* ── Header: tabs + period filter + actions ── */}
+      {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         {/* Brand tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
           {(['innerpium', 'aquacrc'] as Brand[]).map(t => (
-            <button
-              key={t}
-              className={`btn ${tab === t ? 'btn-rose' : 'btn-ghost'}`}
-              onClick={() => { setTab(t); setShowForm(false); }}
-            >
+            <button key={t} className={`btn ${tab === t ? 'btn-rose' : 'btn-ghost'}`}
+              onClick={() => { setTab(t); setShowForm(false); cancelEdit(); }}>
               {t === 'innerpium' ? '이너피움' : '아쿠아크'}
             </button>
           ))}
         </div>
 
-        {/* Period filter */}
+        {/* Period filter (for download) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <select
-            className="input"
-            style={{ width: 90, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={filterYear}
-            onChange={e => setFilterYear(e.target.value)}
-          >
+          <select className="input" style={{ width: 90, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={filterYear} onChange={e => setFilterYear(e.target.value)}>
             <option value="">전체</option>
-            {availableYears.map(y => (
-              <option key={y} value={y}>{y}년</option>
-            ))}
+            {availableYears.map(y => <option key={y} value={y}>{y}년</option>)}
           </select>
-          <select
-            className="input"
-            style={{ width: 76, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={filterMonth}
-            onChange={e => setFilterMonth(e.target.value)}
-            disabled={!filterYear}
-          >
+          <select className="input" style={{ width: 76, fontSize: 12, padding: '4px 8px', height: 32 }}
+            value={filterMonth} onChange={e => setFilterMonth(e.target.value)} disabled={!filterYear}>
             <option value="">전체</option>
             {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => (
               <option key={m} value={m}>{Number(m)}월</option>
             ))}
           </select>
           {(filterYear || filterMonth) && (
-            <button
-              className="btn btn-ghost btn-sm"
+            <button className="btn btn-ghost btn-sm"
               style={{ fontSize: 11, padding: '4px 8px', height: 32 }}
-              onClick={() => { setFilterYear(''); setFilterMonth(''); }}
-            >
+              onClick={() => { setFilterYear(''); setFilterMonth(''); }}>
               전체
             </button>
           )}
         </div>
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 12 }}
-            onClick={handleDownload}
-            disabled={filteredRows.length === 0}
-            title={`${tab === 'innerpium' ? '이너피움' : '아쿠아크'}_매출_${filterYear || currentYearStr}${filterMonth ? '_' + filterMonth : ''}.xlsx`}
-          >
+          <button className="btn btn-ghost" style={{ fontSize: 12 }}
+            onClick={handleDownload} disabled={downloadRows.length === 0}>
             ↓ 엑셀 다운로드
           </button>
-          <button className="btn btn-rose" onClick={openCreate}>
+          <button className="btn btn-rose"
+            onClick={() => { setShowForm(v => !v); setFormDate(todayStr()); }}>
             + 오늘 매출 입력
           </button>
         </div>
       </div>
 
-      {/* ── Entry Form ── */}
+      {/* ── New row form ── */}
       {showForm && (
-        <div className="card" style={{ border: '2px solid var(--rose)', position: 'relative' }}>
+        <div className="card" style={{ border: '2px solid var(--rose)' }}>
           <div className="card-head" style={{ justifyContent: 'space-between' }}>
-            <div className="card-title">
-              {editId != null ? '✎ 매출 수정' : '+ 매출 입력'} — {tab === 'innerpium' ? '이너피움' : '아쿠아크'}
-            </div>
+            <div className="card-title">+ 새 행 추가 — {tab === 'innerpium' ? '이너피움' : '아쿠아크'}</div>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>✕</button>
           </div>
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-            {/* Date */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', minWidth: 36 }}>날짜</label>
-              <input
-                type="date"
-                className="input"
-                style={{ width: 160 }}
-                value={form.date}
-                onChange={e => handleFieldChange('date', e.target.value)}
-              />
-            </div>
-
-            {/* Field groups */}
-            {groups.map(group => (
-              <div key={group.title}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-                  {group.title}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 8 }}>
-                  {group.fields.map(f => (
-                    <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <label style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600 }}>{f.label}</label>
-                      <input
-                        type={f.decimal ? 'number' : 'number'}
-                        step={f.decimal ? '0.01' : '1'}
-                        className="input"
-                        style={{
-                          fontFamily: "'DM Mono', monospace",
-                          fontSize: 13,
-                          background: f.readOnly ? 'var(--surface2)' : undefined,
-                          color: f.readOnly ? 'var(--rose2)' : undefined,
-                          fontWeight: f.readOnly ? 700 : undefined,
-                        }}
-                        readOnly={f.readOnly}
-                        value={form[f.key]}
-                        onChange={e => !f.readOnly && handleFieldChange(f.key, e.target.value)}
-                        placeholder="0"
-                      />
-                    </div>
-                  ))}
-                </div>
+          <div className="card-body">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>날짜</label>
+                <input type="date" className="input" style={{ width: 160 }}
+                  value={formDate} onChange={e => setFormDate(e.target.value)} />
               </div>
-            ))}
-
-            {error && (
-              <div style={{ fontSize: 12, color: 'var(--rose2)', padding: '8px 12px', background: 'rgba(244,63,94,0.08)', borderRadius: 8 }}>
-                {error}
+              <p style={{ fontSize: 12, color: 'var(--text3)' }}>
+                행 추가 후 셀을 클릭해서 데이터를 입력하세요
+              </p>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                <button className="btn btn-ghost" onClick={() => setShowForm(false)}>취소</button>
+                <button className="btn btn-rose" onClick={handleCreateRow} disabled={saving}>
+                  {saving ? '추가 중…' : '행 추가'}
+                </button>
               </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button className="btn btn-ghost" onClick={() => setShowForm(false)}>취소</button>
-              <button className="btn btn-rose" onClick={handleSave} disabled={saving}>
-                {saving ? '저장 중…' : editId != null ? '수정 저장' : '저장'}
-              </button>
             </div>
           </div>
         </div>
@@ -635,154 +480,253 @@ export default function SalesPage() {
 
       {loading ? (
         <div className="empty"><p>불러오는 중…</p></div>
-      ) : filteredRows.length === 0 && rows.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="empty" style={{ padding: '48px 0' }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>📈</div>
           <p>아직 입력된 매출 데이터가 없어요</p>
-          <button className="btn btn-rose" style={{ marginTop: 12 }} onClick={openCreate}>
+          <button className="btn btn-rose" style={{ marginTop: 12 }}
+            onClick={() => { setShowForm(true); setFormDate(todayStr()); }}>
             + 첫 번째 매출 입력
           </button>
         </div>
       ) : (
-        <>
-          {/* ── KPI Cards ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            <KpiCard label="이번달 총매출" value={money(totalRevenue)} sub={kpiSub} accent="var(--rose2)" />
-            <KpiCard label="스토어팜 합계" value={money(storeFarm)} sub={kpiSub} />
-            <KpiCard label="카페24 합계" value={money(cafe24Sum)} sub={kpiSub} />
-            <KpiCard label="총 구매건" value={`${purchases.toLocaleString('ko-KR')}건`} sub={kpiSub} />
-            <KpiCard label="마케팅 총비용" value={money(marketingSum)} sub={kpiSub} />
-            <KpiCard label="평균 전환률" value={pctStr(avgConv)} sub={kpiSub} />
-          </div>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
 
-          {/* ── Chart ── */}
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">▦ 일별 매출 현황</div>
-              <span style={{ fontSize: 11, color: 'var(--text3)' }}>스택바: 채널별 · 라인: 총매출</span>
-            </div>
-            <div className="card-body">
-              <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={chartData} margin={{ top: 4, right: 48, bottom: 0, left: 8 }}>
-                  <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    yAxisId="bar"
-                    tick={{ fontSize: 10, fill: 'var(--text3)' }}
-                    axisLine={false} tickLine={false}
-                    tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : String(v)}
-                  />
-                  <YAxis
-                    yAxisId="line"
-                    orientation="right"
-                    tick={{ fontSize: 10, fill: 'var(--text3)' }}
-                    axisLine={false} tickLine={false}
-                    tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : String(v)}
-                  />
-                  <Tooltip
-                    contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    formatter={(v: any) => [`₩${Number(v ?? 0).toLocaleString('ko-KR')}`, undefined]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                  {barKeys.map((k, i) => (
-                    <Bar key={k} yAxisId="bar" dataKey={k} stackId="s"
-                      fill={CHART_COLORS[k] ?? '#888'}
-                      radius={i === barKeys.length - 1 ? [2, 2, 0, 0] : undefined}
-                    />
-                  ))}
-                  <Line yAxisId="line" type="monotone" dataKey="총매출" stroke={CHART_COLORS['총매출']} strokeWidth={2} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          {/* ── Left: main content ── */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-          {/* ── Data Table ── */}
-          <div className="card">
-            <div className="card-head">
-              <div className="card-title">▤ 일별 데이터</div>
-              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono',monospace" }}>
-                {filteredRows.length}행 · 최신순
-              </span>
+            {/* KPI Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <KpiCard label="총매출 (30일)" value={money(totalRevenue)} sub={kpiSub} accent="var(--rose2)" />
+              <KpiCard label="스토어팜"      value={money(storeFarm)}    sub={kpiSub} />
+              <KpiCard label="카페24"        value={money(cafe24Sum)}    sub={kpiSub} />
+              <KpiCard label="총 구매건"     value={`${purchases.toLocaleString('ko-KR')}건`} sub={kpiSub} />
+              <KpiCard label="마케팅 비용"   value={money(marketingSum)} sub={kpiSub} />
+              <KpiCard label="평균 전환률"   value={pctStr(avgConv)}     sub={kpiSub} />
             </div>
-            <div className="card-body" style={{ padding: 0 }}>
-              {filteredRows.length === 0 ? (
-                <div className="empty" style={{ padding: '24px 0' }}>
-                  <p>해당 기간 데이터가 없어요</p>
-                </div>
-              ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
-                  <thead>
-                    <tr>
-                      {cols.map(c => (
-                        <th key={String(c.field)} style={{
-                          padding: '8px 10px', textAlign: 'center',
-                          background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
-                          color: c.bold ? 'var(--rose2)' : 'var(--text2)',
-                          fontWeight: c.bold ? 700 : 600, fontSize: 10,
-                          position: 'sticky', top: 0,
-                        }}>
-                          {c.label}
-                        </th>
-                      ))}
-                      <th style={{
-                        padding: '8px 10px', background: 'var(--surface2)',
-                        borderBottom: '2px solid var(--border)', fontSize: 10,
-                        color: 'var(--text3)', position: 'sticky', top: 0,
-                      }}>
-                        작업
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRows.map((row, ri) => (
-                      <tr key={row.id} style={{
-                        background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
-                        borderTop: '1px solid var(--border)',
-                      }}>
-                        {cols.map(c => {
-                          const v = dispCell(row, c);
-                          return (
-                            <td key={String(c.field)} style={{
-                              padding: '7px 10px',
-                              textAlign: c.field === 'date' ? 'left' : 'right',
-                              fontWeight: c.bold ? 700 : 400,
-                              color: c.bold ? 'var(--text)' : v === '-' ? 'var(--text3)' : 'var(--text)',
-                              fontFamily: c.field === 'date' ? undefined : "'DM Mono', monospace",
-                            }}>
-                              {v}
-                            </td>
-                          );
-                        })}
-                        <td style={{ padding: '6px 10px', textAlign: 'center' }}>
-                          <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ fontSize: 10, padding: '2px 8px' }}
-                              onClick={() => openEdit(row)}
-                            >
-                              수정
-                            </button>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ fontSize: 10, padding: '2px 8px', color: 'var(--rose2)' }}
-                              disabled={deleting === row.id}
-                              onClick={() => handleDelete(row.id)}
-                            >
-                              {deleting === row.id ? '…' : '삭제'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+            {/* Chart */}
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">▦ 일별 매출 현황</div>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>최근 30일 · 스택바: 채널별 · 라인: 총매출</span>
               </div>
-              )}
+              <div className="card-body">
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={chartData} margin={{ top: 4, right: 48, bottom: 0, left: 8 }}>
+                    <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="bar" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
+                      tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : String(v)} />
+                    <YAxis yAxisId="line" orientation="right" tick={{ fontSize: 10, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
+                      tickFormatter={v => v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : v >= 1_000 ? `${(v / 1_000).toFixed(0)}K` : String(v)} />
+                    <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      formatter={(v: any) => [`₩${Number(v ?? 0).toLocaleString('ko-KR')}`, undefined]} />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                    {barKeys.map((k, i) => (
+                      <Bar key={k} yAxisId="bar" dataKey={k} stackId="s"
+                        fill={CHART_COLORS[k] ?? '#888'}
+                        radius={i === barKeys.length - 1 ? [2, 2, 0, 0] : undefined} />
+                    ))}
+                    <Line yAxisId="line" type="monotone" dataKey="총매출" stroke={CHART_COLORS['총매출']} strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Inline-edit Table */}
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title">▤ 일별 데이터</div>
+                <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono',monospace" }}>
+                  최근 {displayRows.length}행 · 셀 클릭으로 수정
+                  {savingRows.size > 0 && (
+                    <span style={{ color: 'var(--rose2)', marginLeft: 8 }}>저장 중…</span>
+                  )}
+                </span>
+              </div>
+              <div className="card-body" style={{ padding: 0 }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, whiteSpace: 'nowrap' }}>
+                    <thead>
+                      <tr>
+                        {cols.map(c => (
+                          <th key={String(c.field)} style={{
+                            padding: '8px 10px', textAlign: 'center',
+                            background: 'var(--surface2)', borderBottom: '2px solid var(--border)',
+                            color: c.auto ? 'var(--text3)' : c.bold ? 'var(--rose2)' : 'var(--text2)',
+                            fontWeight: c.bold ? 700 : 600, fontSize: 10,
+                            position: 'sticky', top: 0,
+                          }}>
+                            {c.label}{c.auto ? <span style={{ opacity: 0.5 }}> *</span> : ''}
+                          </th>
+                        ))}
+                        <th style={{
+                          padding: '8px 10px', background: 'var(--surface2)',
+                          borderBottom: '2px solid var(--border)', fontSize: 10,
+                          color: 'var(--text3)', position: 'sticky', top: 0,
+                        }}>작업</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayRows.map((row, ri) => {
+                        const isSaving = savingRows.has(row.id);
+                        return (
+                          <tr key={row.id} style={{
+                            background: ri % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
+                            borderTop: '1px solid var(--border)',
+                            opacity: isSaving ? 0.65 : 1,
+                            transition: 'opacity 0.2s',
+                          }}>
+                            {cols.map(c => {
+                              const isEditing = editCell?.rowId === row.id && editCell?.field === c.field;
+                              const canEdit   = !c.auto && !c.noEdit;
+                              const v         = dispCell(row, c);
+                              return (
+                                <td key={String(c.field)}
+                                  onClick={() => canEdit && startEdit(row.id, c.field)}
+                                  style={{
+                                    padding: isEditing ? 0 : '7px 10px',
+                                    textAlign: c.field === 'date' ? 'left' : 'right',
+                                    fontWeight: c.bold ? 700 : 400,
+                                    color: c.auto
+                                      ? 'var(--text3)'
+                                      : c.bold
+                                      ? 'var(--text)'
+                                      : v === '-' ? 'var(--text3)' : 'var(--text)',
+                                    fontFamily: c.field === 'date' ? undefined : "'DM Mono', monospace",
+                                    cursor: canEdit ? 'text' : 'default',
+                                    background: isEditing ? 'rgba(244,63,94,0.06)' : undefined,
+                                    minWidth: isEditing ? 80 : undefined,
+                                  }}>
+                                  {isEditing ? (
+                                    <input
+                                      ref={inputRef}
+                                      type="number"
+                                      value={editValue}
+                                      onChange={e => setEditValue(e.target.value)}
+                                      onBlur={commitEdit}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter')  { e.preventDefault(); commitEdit(); }
+                                        if (e.key === 'Escape') cancelEdit();
+                                      }}
+                                      style={{
+                                        width: '100%', padding: '7px 10px',
+                                        background: 'transparent', border: 'none', outline: 'none',
+                                        textAlign: 'right', fontSize: 11, color: 'var(--text)',
+                                        fontFamily: "'DM Mono', monospace",
+                                      }}
+                                    />
+                                  ) : v}
+                                </td>
+                              );
+                            })}
+                            <td style={{ padding: '6px 10px', textAlign: 'center' }}>
+                              <button className="btn btn-ghost btn-sm"
+                                style={{ fontSize: 10, padding: '2px 8px', color: 'var(--rose2)' }}
+                                onClick={() => handleDelete(row.id)}>
+                                삭제
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
-        </>
+
+          {/* ── Right: side panel ── */}
+          <div style={{ width: 248, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 16 }}>
+
+            {/* Memo */}
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title" style={{ fontSize: 12 }}>✎ 메모</div>
+                <span style={{ fontSize: 10, color: 'var(--text3)' }}>자동 저장</span>
+              </div>
+              <div className="card-body" style={{ padding: '8px 10px' }}>
+                <textarea
+                  value={memo}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setMemo(v);
+                    localStorage.setItem(`memo-${tab}`, v);
+                  }}
+                  placeholder="자유롭게 메모하세요…"
+                  style={{
+                    width: '100%', height: 148,
+                    background: 'transparent', border: 'none', outline: 'none',
+                    resize: 'vertical', fontSize: 12, color: 'var(--text)',
+                    fontFamily: 'inherit', lineHeight: 1.65,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Calculator */}
+            <div className="card">
+              <div className="card-head">
+                <div className="card-title" style={{ fontSize: 12 }}>⊞ 계산기</div>
+              </div>
+              <div className="card-body" style={{ padding: '8px 10px' }}>
+                {/* Display */}
+                <div style={{
+                  background: 'var(--surface2)', borderRadius: 8,
+                  padding: '8px 12px', marginBottom: 6,
+                  textAlign: 'right', fontSize: 20, fontWeight: 700,
+                  fontFamily: "'DM Mono', monospace", color: 'var(--text)',
+                  minHeight: 44, wordBreak: 'break-all', lineHeight: 1.2,
+                }}>
+                  {calcDisplay}
+                </div>
+                {/* Expression hint */}
+                {!calcShowResult && calcExpr && (
+                  <div style={{
+                    textAlign: 'right', fontSize: 10, color: 'var(--text3)',
+                    marginBottom: 6, fontFamily: "'DM Mono', monospace",
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {calcExpr}
+                  </div>
+                )}
+                {/* Buttons */}
+                {CALC_ROWS.map((btnRow, ri) => (
+                  <div key={ri} style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, marginBottom: 4 }}>
+                    {btnRow.map(btn => (
+                      <button key={btn} onClick={() => calcPress(btn)} style={{
+                        padding: '10px 0', borderRadius: 6, border: 'none',
+                        cursor: 'pointer', fontSize: 13,
+                        fontWeight: CALC_FUNCS.has(btn) || CALC_OPS.has(btn) ? 600 : 400,
+                        fontFamily: "'DM Mono', monospace",
+                        background: btn === '='
+                          ? 'var(--rose2)'
+                          : CALC_OPS.has(btn)
+                          ? 'var(--surface2)'
+                          : CALC_FUNCS.has(btn)
+                          ? 'var(--surface2)'
+                          : 'var(--surface)',
+                        color: btn === '='
+                          ? '#fff'
+                          : btn === 'C'
+                          ? 'var(--rose2)'
+                          : CALC_OPS.has(btn)
+                          ? 'var(--rose2)'
+                          : 'var(--text)',
+                      }}>
+                        {btn}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        </div>
       )}
     </div>
   );

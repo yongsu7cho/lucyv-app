@@ -11,14 +11,14 @@ interface SidebarProps {
 const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; badge?: boolean }[] = [
   { tab: 'dashboard', icon: '◈', label: '대시보드', section: 'Overview' },
   { tab: 'influencer', icon: '✦', label: '인플루언서/공구', section: 'Commerce', badge: true },
-  { tab: 'orders', icon: '◈', label: '발주서 관리', section: 'Commerce' },
-  { tab: 'sales', icon: '📈', label: '브랜드 매출', section: 'Commerce' },
+  { tab: 'orders', icon: '◫', label: '발주서 관리' },
   { tab: 'settlement', icon: '₩', label: '정산/발주' },
-  { tab: 'projects', icon: '◉', label: '프로젝트/캠페인', section: 'Brand' },
-  { tab: 'meta', icon: '◈', label: '메타 광고' },
-  { tab: 'calendar', icon: '◷', label: '일정/캘린더' },
-  { tab: 'team', icon: '◎', label: '팀원 관리', section: 'Team' },
-  { tab: 'memo', icon: '✎', label: '메모장', section: 'Note' },
+  { tab: 'sales', icon: '📈', label: '브랜드 매출', section: 'Brand & Project' },
+  { tab: 'meta', icon: '◐', label: '메타 광고' },
+  { tab: 'projects', icon: '◉', label: '프로젝트/캠페인' },
+  { tab: 'personal', icon: '◷', label: '일정/캘린더', section: 'Schedule & Team' },
+  { tab: 'team', icon: '◎', label: '팀원 관리' },
+  { tab: 'memo', icon: '✎', label: '메모장' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount }: SidebarProps) {

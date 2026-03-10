@@ -1165,6 +1165,7 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 .gcal-white-day:hover { background: #fafafa; }
 .gcal-white-day.om { background: #f9f9f9; }
 .gcal-white-day.om .gcal-white-num { color: #bbb; }
+.gcal-white-day.sel { background: #fff5f6; border-color: #e8a0a8; }
 .gcal-white-num {
   font-size: 12px;
   font-weight: 500;
