@@ -174,8 +174,8 @@ function calcAutoFields(row: BrandSaleRow): BrandSaleRow {
   r.total_sales = (r.storefarm || 0) + (r.cafe24 || 0) + (r.etc || 0);
   const inflowSum = (r.inflow_24 || 0) + (r.inflow_n || 0);
   r.inflow_cost     = inflowSum > 0 ? Math.round((r.marketing_total || 0) / inflowSum) : null;
-  r.conversion_rate = inflowSum > 0
-    ? Number(((r.purchase_count || 0) / inflowSum * 100).toFixed(2))
+  r.conversion_rate = r.inflow_24
+    ? Number(((r.purchase_count || 0) / r.inflow_24 * 100).toFixed(2))
     : null;
   return r;
 }
