@@ -336,7 +336,7 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
   onStatusToggle: (id: string, newStatus: SStatus) => void;
 }) {
   const hasSelected = projects.some(p => p.id === selectedId);
-  const hasActive = projects.some(p => p.status === 'active');
+  const firstActiveProject = projects.find(p => p.status === 'active') ?? null;
   const [open, setOpen] = useState(hasSelected);
 
   // Auto-open when a child project gets selected
@@ -370,20 +370,13 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
             <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {influencer.name}
             </span>
-            <span style={{
-              fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0,
-              background: influencer.type === 'pay' ? 'rgba(220,50,80,0.12)' : 'rgba(40,160,100,0.12)',
-              color: influencer.type === 'pay' ? 'var(--danger)' : 'var(--success)',
-            }}>
-              {influencer.type === 'pay' ? '지급' : '수취'}
-            </span>
-            {projects.length > 0 && (
+            {firstActiveProject && (
               <span style={{
                 fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0,
-                background: hasActive ? 'rgba(40,160,100,0.14)' : 'rgba(140,140,140,0.14)',
-                color: hasActive ? 'var(--success)' : 'var(--text3)',
+                background: 'rgba(40,160,100,0.14)', color: 'var(--success)',
+                maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
-                {hasActive ? '진행중' : '완료'}
+                {firstActiveProject.name}
               </span>
             )}
           </div>
@@ -402,18 +395,17 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
       {/* Accordion body */}
       {open && (
         <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-          {projects.length === 0 ? (
-            <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
-              공구가 없습니다
-            </div>
-          ) : (
-            <div>
-              {[...projects]
+          {/* 최대 5개 스크롤 영역 */}
+          <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+            {projects.length === 0 ? (
+              <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
+                공구가 없습니다
+              </div>
+            ) : (
+              [...projects]
                 .sort((a, b) => {
-                  // 진행중 먼저, 완료 아래
                   const statusOrder = (s: SStatus) => s === 'active' ? 0 : 1;
                   if (statusOrder(a.status) !== statusOrder(b.status)) return statusOrder(a.status) - statusOrder(b.status);
-                  // 같은 상태 안에서 최신순
                   if (!a.start_date && !b.start_date) return 0;
                   if (!a.start_date) return 1;
                   if (!b.start_date) return -1;
@@ -429,10 +421,11 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
                     onStatusToggle={onStatusToggle}
                     indent
                   />
-                ))}
-            </div>
-          )}
-          <div style={{ padding: '8px 14px' }}>
+                ))
+            )}
+          </div>
+          {/* 추가 버튼 항상 고정 */}
+          <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
             <button
               className="btn btn-ghost btn-sm"
               style={{ width: '100%', fontSize: 11 }}
