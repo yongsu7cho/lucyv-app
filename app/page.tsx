@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
+import PasswordLock from './components/PasswordLock';
 import Dashboard from './components/Dashboard';
 import InfluencerPage from './components/InfluencerPage';
 import ProjectsPage from './components/ProjectsPage';
@@ -150,69 +151,12 @@ async function syncCalendarEvents(oldMap: CalendarEventMap, newMap: CalendarEven
   }
 }
 
-/* ── Password lock ── */
-const LOCKED_TABS = new Set<TabName>(['settlement', 'sales']);
-const LOCK_PW = '1111';
-const SESSION_KEY = (tab: TabName) => `tab_unlocked_${tab}`;
-
-function isUnlocked(tab: TabName): boolean {
-  if (typeof window === 'undefined') return false;
-  return sessionStorage.getItem(SESSION_KEY(tab)) === '1';
-}
-
-function PasswordModal({ tab, onSuccess, onCancel }: { tab: TabName; onSuccess: () => void; onCancel: () => void }) {
-  const [pw, setPw] = useState('');
-  const [error, setError] = useState(false);
-
-  function submit() {
-    if (pw === LOCK_PW) {
-      sessionStorage.setItem(SESSION_KEY(tab), '1');
-      onSuccess();
-    } else {
-      setError(true);
-      setPw('');
-    }
-  }
-
-  return (
-    <>
-      <div className="dp-backdrop" onClick={onCancel} style={{ zIndex: 1200 }} />
-      <div className="modal" style={{ zIndex: 1300 }}>
-        <div style={{ textAlign: 'center', marginBottom: 16 }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>🔒</div>
-          <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>접근 제한 탭입니다</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>비밀번호를 입력하세요</div>
-        </div>
-        <input
-          className="input"
-          type="password"
-          placeholder="비밀번호"
-          value={pw}
-          autoFocus
-          onChange={e => { setPw(e.target.value); setError(false); }}
-          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onCancel(); }}
-          style={{ textAlign: 'center', letterSpacing: 4, fontSize: 18 }}
-        />
-        {error && (
-          <div style={{ color: 'var(--danger)', fontSize: 12, textAlign: 'center', marginTop: 8 }}>
-            비밀번호가 틀렸습니다
-          </div>
-        )}
-        <div className="modal-foot" style={{ marginTop: 16 }}>
-          <button className="btn btn-ghost" onClick={onCancel}>취소</button>
-          <button className="btn btn-rose" onClick={submit}>확인</button>
-        </div>
-      </div>
-    </>
-  );
-}
 
 // ── Main App ──
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabName>('dashboard');
   const [mounted, setMounted] = useState(false);
   const [openInfluencerId, setOpenInfluencerId] = useState<number | null>(null);
-  const [pendingTab, setPendingTab] = useState<TabName | null>(null);
 
   const [influencers, setInfluencersState] = useState<Influencer[]>([]);
   const [projects, setProjectsState] = useState<Project[]>([]);
@@ -341,26 +285,11 @@ export default function Home() {
 
   const activeInfCount = influencers.filter(i => i.status === 'active').length;
 
-  function handleTabChange(tab: TabName) {
-    if (LOCKED_TABS.has(tab) && !isUnlocked(tab)) {
-      setPendingTab(tab);
-    } else {
-      setActiveTab(tab);
-    }
-  }
-
   return (
     <div className="app-layout">
-      {pendingTab && (
-        <PasswordModal
-          tab={pendingTab}
-          onSuccess={() => { setActiveTab(pendingTab); setPendingTab(null); }}
-          onCancel={() => setPendingTab(null)}
-        />
-      )}
       <Sidebar
         activeTab={activeTab}
-        onTabChange={handleTabChange}
+        onTabChange={setActiveTab}
         activeInfluencerCount={activeInfCount}
       />
       <div className="main">
@@ -396,7 +325,9 @@ export default function Home() {
             <CalendarPage />
           )}
           {activeTab === 'settlement' && (
-            <SettlementPage />
+            <PasswordLock tabName="settlement" password="1234">
+              <SettlementPage />
+            </PasswordLock>
           )}
           {activeTab === 'team' && (
             <TeamPage
@@ -412,7 +343,11 @@ export default function Home() {
           )}
           {activeTab === 'orders' && <OrderPage />}
           {activeTab === 'meta' && <MetaPage />}
-          {activeTab === 'sales' && <SalesPage />}
+          {activeTab === 'sales' && (
+            <PasswordLock tabName="sales" password="1111">
+              <SalesPage />
+            </PasswordLock>
+          )}
         </div>
       </div>
     </div>
