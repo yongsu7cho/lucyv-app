@@ -954,8 +954,9 @@ export default function SalesPage() {
             </div>
           </div>
 
-          {/* ── Right: side panel ── */}
-          <div style={{ width: 248, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 16 }}>
+          {/* ── Right: side panel (hidden on mobile) ── */}
+          <div style={{ width: 248, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', top: 16 }}
+            className="sales-side-panel">
 
             <div className="card">
               <div className="card-head">

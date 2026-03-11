@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Influencer, Project, TeamMember, ActionItem, Brand, InfluencerStatus, ProjectStatus, TeamStatus } from '../types';
 
 type PanelItem = Influencer | Project | TeamMember;
@@ -12,19 +12,74 @@ interface Props {
   onClose: () => void;
 }
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export default function DetailPanel({ type, item, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<PanelItem>(item);
   const [saving, setSaving] = useState(false);
 
-  // Sync when item changes externally
-  useEffect(() => { setDraft(item); }, [item]);
+  // Team autosave state
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [snapshots, setSnapshots] = useState<PanelItem[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether draft changed by user (vs external item sync)
+  const userChangedRef = useRef(false);
 
-  // Close on Escape
+  // Sync when item changes externally (e.g. after reorderActions save)
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    userChangedRef.current = false;
+    setDraft(item);
+  }, [item]);
+
+  // Team: debounced autosave
+  useEffect(() => {
+    if (type !== 'team') return;
+    if (!userChangedRef.current) return;
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSaveStatus('saving');
+      try {
+        await onSave(draft);
+        // Save snapshot for undo (up to 10 levels)
+        setSnapshots(prev => [...prev, draft].slice(-10));
+        setSaveStatus('saved');
+        if (savedStatusTimer.current) clearTimeout(savedStatusTimer.current);
+        savedStatusTimer.current = setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+      }
+    }, 1500);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, type]);
+
+  // Undo handler
+  const handleUndo = useCallback(() => {
+    setSnapshots(prev => {
+      if (prev.length === 0) return prev;
+      const restored = prev[prev.length - 1];
+      const remaining = prev.slice(0, -1);
+      userChangedRef.current = true;
+      setDraft(restored);
+      return remaining;
+    });
+  }, []);
+
+  // Keyboard: Escape to close, Cmd/Ctrl+Z to undo (team only)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (type === 'team' && (e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, type, handleUndo]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = draft as any;
@@ -32,10 +87,11 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
   const notes: string = d.notes ?? '';
 
   function upd(field: string, value: unknown) {
+    userChangedRef.current = true;
     setDraft(prev => ({ ...prev, [field]: value }));
   }
 
-  // Sorted view: incomplete first, then complete (stable within each group)
+  // Sorted view: incomplete first, then complete
   const sortedActions = [
     ...actions.filter(a => !a.done),
     ...actions.filter(a => a.done),
@@ -49,10 +105,7 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     if (!target) return;
     const toggled = { ...target, done: !target.done };
     const rest = actions.filter(a => a.id !== id);
-    // completed → push to end; uncompleted → push to front of incomplete section
-    const newActions = toggled.done
-      ? [...rest, toggled]
-      : [toggled, ...rest];
+    const newActions = toggled.done ? [...rest, toggled] : [toggled, ...rest];
     upd('actions', newActions);
   }
   function updateActionText(id: number, text: string) {
@@ -62,8 +115,8 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     upd('actions', actions.filter(a => a.id !== id));
   }
   async function reorderActions(newActions: ActionItem[]) {
-    upd('actions', newActions);
-    // Immediately persist order to DB
+    userChangedRef.current = false; // reorder saves immediately, don't debounce
+    setDraft(prev => ({ ...prev, actions: newActions }));
     const updated = { ...draft, actions: newActions } as PanelItem;
     await onSave(updated);
   }
@@ -79,6 +132,15 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     type === 'project' ? (draft as Project).name :
     (draft as TeamMember).name;
 
+  const saveStatusEl = type === 'team' && saveStatus !== 'idle' ? (
+    <span style={{
+      fontSize: 11, fontFamily: "'DM Mono',monospace",
+      color: saveStatus === 'saving' ? 'var(--text3)' : saveStatus === 'saved' ? 'var(--success)' : 'var(--danger)',
+    }}>
+      {saveStatus === 'saving' ? '저장 중...' : saveStatus === 'saved' ? '저장됨 ✓' : '저장 실패 ✗'}
+    </span>
+  ) : null;
+
   return (
     <>
       <div className="dp-backdrop" onClick={onClose} />
@@ -91,20 +153,29 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
               {type === 'influencer' ? '인플루언서' : type === 'project' ? '프로젝트' : '팀원'}
             </div>
           </div>
-          <button className="dp-close-btn" onClick={onClose}>✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {saveStatusEl}
+            {type === 'team' && snapshots.length > 0 && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={handleUndo}
+                title="되돌리기 (Cmd+Z)"
+                style={{ fontSize: 12, padding: '3px 8px' }}
+              >↩ 되돌리기</button>
+            )}
+            <button className="dp-close-btn" onClick={onClose}>✕</button>
+          </div>
         </div>
 
         {/* Body */}
         <div className="dp-body">
           {type === 'team' ? (
             <>
-              {/* 상태 */}
               <div className="dp-section">
                 <div className="dp-section-label">상태</div>
                 <TeamStatusField m={draft as TeamMember} upd={upd} />
               </div>
 
-              {/* Notes */}
               <div className="dp-section">
                 <div className="dp-section-label">노트 / 메모</div>
                 <textarea
@@ -115,7 +186,6 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                 />
               </div>
 
-              {/* Action Items */}
               <div className="dp-section">
                 <div className="dp-section-label">
                   액션 아이템
@@ -137,7 +207,6 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                 <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
               </div>
 
-              {/* 기본 정보 */}
               <div className="dp-section">
                 <div className="dp-section-label">기본 정보</div>
                 <TeamFields m={draft as TeamMember} upd={upd} />
@@ -145,14 +214,12 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
             </>
           ) : (
             <>
-              {/* Basic Info */}
               <div className="dp-section">
                 <div className="dp-section-label">기본 정보</div>
                 {type === 'influencer' && <InfluencerFields inf={draft as Influencer} upd={upd} />}
                 {type === 'project' && <ProjectFields p={draft as Project} upd={upd} />}
               </div>
 
-              {/* Notes */}
               <div className="dp-section">
                 <div className="dp-section-label">노트 / 메모</div>
                 <textarea
@@ -163,7 +230,6 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                 />
               </div>
 
-              {/* Action Items */}
               <div className="dp-section">
                 <div className="dp-section-label">
                   액션 아이템
@@ -188,13 +254,21 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="dp-foot">
-          <button className="btn btn-ghost" onClick={onClose}>닫기</button>
-          <button className="btn btn-rose" onClick={handleSave} disabled={saving}>
-            {saving ? '저장 중...' : '저장'}
-          </button>
-        </div>
+        {/* Footer — hidden for team (autosave), shown for others */}
+        {type !== 'team' && (
+          <div className="dp-foot">
+            <button className="btn btn-ghost" onClick={onClose}>닫기</button>
+            <button className="btn btn-rose" onClick={handleSave} disabled={saving}>
+              {saving ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        )}
+        {type === 'team' && (
+          <div className="dp-foot">
+            <button className="btn btn-ghost" onClick={onClose}>닫기</button>
+            <span style={{ fontSize: 11, color: 'var(--text3)' }}>변경 시 1.5초 후 자동저장</span>
+          </div>
+        )}
       </div>
     </>
   );
@@ -215,20 +289,22 @@ function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: Ac
   const [overId, setOverId] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
 
+  // Handle starts only from the drag handle (span with draggable)
   function handleDragStart(e: React.DragEvent, id: number) {
     dragId.current = id;
     setDraggingId(id);
     e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(id));
   }
 
   function handleDragOver(e: React.DragEvent, id: number, done: boolean) {
-    e.preventDefault();
+    e.preventDefault(); // Must always prevent default to allow drop
+    e.dataTransfer.dropEffect = 'move';
     if (done || id === dragId.current) return;
     setOverId(id);
   }
 
   function handleDragLeave(e: React.DragEvent, id: number) {
-    // Only clear overId if leaving to outside the list (not to a child element)
     if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
       setOverId(prev => prev === id ? null : prev);
     }
@@ -238,22 +314,30 @@ function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: Ac
     e.preventDefault();
     setOverId(null);
     const fromId = dragId.current;
-    if (fromId === null || fromId === targetId || done) return;
+    if (fromId === null || fromId === targetId || done) {
+      dragId.current = null;
+      setDraggingId(null);
+      return;
+    }
 
     const incomplete = actions.filter(a => !a.done);
     const complete = actions.filter(a => a.done);
 
     const fromIdx = incomplete.findIndex(a => a.id === fromId);
     const toIdx = incomplete.findIndex(a => a.id === targetId);
-    if (fromIdx === -1 || toIdx === -1) return;
+    if (fromIdx === -1 || toIdx === -1) {
+      dragId.current = null;
+      setDraggingId(null);
+      return;
+    }
 
     const reordered = [...incomplete];
     const [moved] = reordered.splice(fromIdx, 1);
     reordered.splice(toIdx, 0, moved);
 
-    onReorder([...reordered, ...complete]);
     dragId.current = null;
     setDraggingId(null);
+    onReorder([...reordered, ...complete]);
   }
 
   function handleDragEnd() {
@@ -272,19 +356,31 @@ function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: Ac
             draggingId === a.id ? 'dp-dragging' : '',
             overId === a.id ? 'dp-drag-over' : '',
           ].filter(Boolean).join(' ')}
-          draggable={!a.done}
-          onDragStart={a.done ? undefined : e => handleDragStart(e, a.id)}
           onDragOver={e => handleDragOver(e, a.id, a.done)}
           onDragLeave={e => handleDragLeave(e, a.id)}
           onDrop={e => handleDrop(e, a.id, a.done)}
-          onDragEnd={handleDragEnd}
         >
+          {/* Drag handle — draggable is only here, not on the whole row */}
           <span
             className="dp-drag-handle"
+            draggable={!a.done}
+            onDragStart={a.done ? undefined : e => handleDragStart(e, a.id)}
+            onDragEnd={handleDragEnd}
             style={{ cursor: a.done ? 'default' : 'grab', opacity: a.done ? 0.2 : 0.5 }}
           >⋮⋮</span>
-          <input type="checkbox" className="dp-action-check" checked={a.done} onChange={() => onToggle(a.id)} />
-          <input type="text" className={`dp-action-text${a.done ? ' done' : ''}`} placeholder="할 일 입력..." value={a.text} onChange={e => onUpdateText(a.id, e.target.value)} />
+          <input
+            type="checkbox"
+            className="dp-action-check"
+            checked={a.done}
+            onChange={() => onToggle(a.id)}
+          />
+          <input
+            type="text"
+            className={`dp-action-text${a.done ? ' done' : ''}`}
+            placeholder="할 일 입력..."
+            value={a.text}
+            onChange={e => onUpdateText(a.id, e.target.value)}
+          />
           <button className="dp-action-del" onClick={() => onRemove(a.id)}>✕</button>
         </div>
       ))}

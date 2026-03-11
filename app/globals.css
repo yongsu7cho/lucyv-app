@@ -1228,6 +1228,9 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
 
 /* ── RESPONSIVE (≤768px) ── */
 @media (max-width: 768px) {
+  .sales-side-panel {
+    display: none !important;
+  }
   /* Hamburger button */
   .mob-hamburger {
     display: flex;
