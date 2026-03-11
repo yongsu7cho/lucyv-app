@@ -208,14 +208,14 @@ export default function SettlementPage() {
   const unassigned = projects.filter(p => !p.influencer_id);
 
   return (
-    <div className="fade-in" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 130px)', overflow: 'hidden' }}>
-      {/* ── Left: influencer accordion list ── */}
-      <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexShrink: 0 }}>
+    <div className="fade-in" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      {/* ── Left: influencer accordion list (natural height, page scrolls) ── */}
+      <div style={{ width: 300, flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>정산 관리</span>
           <button className="btn btn-rose btn-sm" onClick={() => setShowNewInf(true)}>+ 인플루언서(프로젝트) 추가</button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {loading ? (
             <p style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: 20 }}>불러오는 중...</p>
           ) : influencers.length === 0 && unassigned.length === 0 ? (
@@ -287,8 +287,8 @@ export default function SettlementPage() {
         </div>
       </div>
 
-      {/* ── Right: detail panel ── */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      {/* ── Right: detail panel (sticky so it stays in view while left scrolls) ── */}
+      <div style={{ flex: 1, position: 'sticky', top: 20, height: 'calc(100vh - 150px)' }}>
         {selected ? (
           <ProjectPanel
             key={selected.id}
@@ -336,6 +336,7 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
   onStatusToggle: (id: string, newStatus: SStatus) => void;
 }) {
   const hasSelected = projects.some(p => p.id === selectedId);
+  const hasActive = projects.some(p => p.status === 'active');
   const [open, setOpen] = useState(hasSelected);
 
   // Auto-open when a child project gets selected
@@ -376,6 +377,15 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
             }}>
               {influencer.type === 'pay' ? '지급' : '수취'}
             </span>
+            {projects.length > 0 && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0,
+                background: hasActive ? 'rgba(40,160,100,0.14)' : 'rgba(140,140,140,0.14)',
+                color: hasActive ? 'var(--success)' : 'var(--text3)',
+              }}>
+                {hasActive ? '진행중' : '완료'}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text3)' }}>
             공구 {projects.length}개 · 총매출{' '}
