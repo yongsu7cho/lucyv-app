@@ -131,7 +131,7 @@ function mapRows(platform: Platform, raw: RawRow): OrderRow[] {
     base.배송메모 = g(raw, '배송메세지');
     const prodName = g(raw, '상품명');
     const tag = extractBracketTag(prodName);
-    if (tag) base.기타 = tag;
+    base.기타 = tag ? `스마트스토어 ${tag}` : '스마트스토어';
     const rawQty = g(raw, '수량');
     const optStr = g(raw, '옵션정보') || prodName;
     const items = parseOptionItems(optStr);
