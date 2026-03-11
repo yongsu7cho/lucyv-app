@@ -9,8 +9,17 @@ import { fmt, dk } from '../constants';
 type SType = 'pay' | 'receive';
 type SStatus = 'active' | 'done';
 
+interface SInfluencer {
+  id: string;
+  name: string;
+  type: SType;
+  notes: string;
+  created_at: string;
+}
+
 interface SProject {
   id: string;
+  influencer_id: string | null;
   name: string;
   brand: string;
   influencer: string;
@@ -31,7 +40,7 @@ interface DailyRow {
   memo: string;
 }
 
-/* ── Order parsing helpers (from OrderPage) ── */
+/* ── Order parsing helpers ── */
 
 type Platform = '카페24' | '스마트스토어' | '쿠팡' | '신세계V' | '무신사' | 'W컨셉';
 const PLATFORMS: Platform[] = ['카페24', '스마트스토어', '쿠팡', '신세계V', '무신사', 'W컨셉'];
@@ -164,38 +173,95 @@ const TD: React.CSSProperties = { padding: '7px 12px', color: 'var(--text)', whi
 ══════════════════════════════════════════════════════ */
 
 export default function SettlementPage() {
+  const [influencers, setInfluencers] = useState<SInfluencer[]>([]);
   const [projects, setProjects] = useState<SProject[]>([]);
+  const [salesTotals, setSalesTotals] = useState<Record<string, number>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showNew, setShowNew] = useState(false);
+  const [showNewInf, setShowNewInf] = useState(false);
+  const [newProjForInf, setNewProjForInf] = useState<string | null>(null);
 
-  useEffect(() => { fetchProjects(); }, []);
+  useEffect(() => { fetchAll(); }, []);
 
-  async function fetchProjects() {
+  async function fetchAll() {
     setLoading(true);
-    const { data } = await supabase.from('settlement_projects').select('*').order('created_at', { ascending: false });
-    if (data) setProjects(data as SProject[]);
+    const [infRes, projRes, salesRes] = await Promise.all([
+      supabase.from('settlement_influencers').select('*').order('created_at', { ascending: false }),
+      supabase.from('settlement_projects').select('*').order('created_at', { ascending: false }),
+      supabase.from('settlement_daily').select('project_id, sales_amount'),
+    ]);
+    if (infRes.data) setInfluencers(infRes.data as SInfluencer[]);
+    if (projRes.data) setProjects(projRes.data as SProject[]);
+    if (salesRes.data) {
+      const totals: Record<string, number> = {};
+      for (const row of salesRes.data) {
+        totals[row.project_id] = (totals[row.project_id] ?? 0) + (row.sales_amount ?? 0);
+      }
+      setSalesTotals(totals);
+    }
     setLoading(false);
   }
 
   const selected = projects.find(p => p.id === selectedId) ?? null;
 
+  // Projects without influencer_id (legacy)
+  const unassigned = projects.filter(p => !p.influencer_id);
+
   return (
     <div className="fade-in" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 130px)', overflow: 'hidden' }}>
-      {/* ── Left: project list ── */}
+      {/* ── Left: influencer accordion list ── */}
       <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>정산 프로젝트</span>
-          <button className="btn btn-rose btn-sm" onClick={() => setShowNew(true)}>+ 새 프로젝트</button>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>정산 관리</span>
+          <button className="btn btn-rose btn-sm" onClick={() => setShowNewInf(true)}>+ 인플루언서 추가</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {loading ? (
             <p style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: 20 }}>불러오는 중...</p>
-          ) : projects.length === 0 ? (
-            <div className="empty"><div className="empty-icon">₩</div><p>프로젝트를 추가해보세요</p></div>
-          ) : projects.map(p => (
-            <ProjectCard key={p.id} project={p} selected={p.id === selectedId} onClick={() => setSelectedId(p.id)} />
-          ))}
+          ) : influencers.length === 0 && unassigned.length === 0 ? (
+            <div className="empty"><div className="empty-icon">₩</div><p>인플루언서를 추가해보세요</p></div>
+          ) : (
+            <>
+              {influencers.map(inf => {
+                const infProjects = projects.filter(p => p.influencer_id === inf.id);
+                const infTotalSales = infProjects.reduce((s, p) => s + (salesTotals[p.id] ?? 0), 0);
+                return (
+                  <InfluencerAccordionItem
+                    key={inf.id}
+                    influencer={inf}
+                    projects={infProjects}
+                    salesTotals={salesTotals}
+                    totalSales={infTotalSales}
+                    selectedId={selectedId}
+                    onSelectProject={setSelectedId}
+                    onAddProject={() => setNewProjForInf(inf.id)}
+                    onDeleteInfluencer={id => {
+                      setInfluencers(prev => prev.filter(i => i.id !== id));
+                      setProjects(prev => prev.filter(p => p.influencer_id !== id));
+                      if (selected?.influencer_id === id) setSelectedId(null);
+                    }}
+                  />
+                );
+              })}
+              {/* Legacy unassigned projects */}
+              {unassigned.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface2)' }}>
+                  <div style={{ padding: '10px 14px', fontSize: 11, fontWeight: 700, color: 'var(--text3)', borderBottom: '1px solid var(--border)' }}>
+                    미분류 공구 ({unassigned.length})
+                  </div>
+                  {unassigned.map(p => (
+                    <ProjectRow
+                      key={p.id}
+                      project={p}
+                      salesTotal={salesTotals[p.id] ?? 0}
+                      selected={p.id === selectedId}
+                      onClick={() => setSelectedId(p.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -211,73 +277,232 @@ export default function SettlementPage() {
           />
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="empty"><div className="empty-icon">◈</div><p>프로젝트를 선택하세요</p></div>
+            <div className="empty"><div className="empty-icon">◈</div><p>공구를 선택하세요</p></div>
           </div>
         )}
       </div>
 
-      {/* ── New project modal ── */}
-      {showNew && (
+      {/* ── Modals ── */}
+      {showNewInf && (
+        <NewInfluencerModal
+          onClose={() => setShowNewInf(false)}
+          onCreate={inf => { setInfluencers(prev => [inf, ...prev]); setShowNewInf(false); }}
+        />
+      )}
+      {newProjForInf && (
         <NewProjectModal
-          onClose={() => setShowNew(false)}
-          onCreate={p => { setProjects(prev => [p, ...prev]); setSelectedId(p.id); setShowNew(false); }}
+          influencerId={newProjForInf}
+          onClose={() => setNewProjForInf(null)}
+          onCreate={p => { setProjects(prev => [p, ...prev]); setSelectedId(p.id); setNewProjForInf(null); }}
         />
       )}
     </div>
   );
 }
 
-/* ── ProjectCard ── */
+/* ── InfluencerAccordionItem ── */
 
-function ProjectCard({ project: p, selected, onClick }: { project: SProject; selected: boolean; onClick: () => void }) {
+function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales, selectedId, onSelectProject, onAddProject, onDeleteInfluencer }: {
+  influencer: SInfluencer;
+  projects: SProject[];
+  salesTotals: Record<string, number>;
+  totalSales: number;
+  selectedId: string | null;
+  onSelectProject: (id: string) => void;
+  onAddProject: () => void;
+  onDeleteInfluencer: (id: string) => void;
+}) {
+  const hasSelected = projects.some(p => p.id === selectedId);
+  const [open, setOpen] = useState(hasSelected);
+
+  // Auto-open when a child project gets selected
+  useEffect(() => { if (hasSelected) setOpen(true); }, [hasSelected]);
+
+  async function handleDelete() {
+    if (!confirm(`"${influencer.name}" 인플루언서와 모든 하위 공구를 삭제할까요?`)) return;
+    await supabase.from('settlement_influencers').delete().eq('id', influencer.id);
+    onDeleteInfluencer(influencer.id);
+  }
+
+  return (
+    <div style={{
+      border: `1px solid ${hasSelected ? 'var(--rose)' : 'var(--border)'}`,
+      borderRadius: 12,
+      overflow: 'hidden',
+      background: 'var(--surface2)',
+      transition: 'border-color 0.15s',
+    }}>
+      {/* Accordion header */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ padding: '11px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, userSelect: 'none' }}
+      >
+        <span style={{
+          fontSize: 10, color: 'var(--text3)', transition: 'transform 0.15s',
+          transform: open ? 'rotate(90deg)' : 'none', display: 'inline-block', flexShrink: 0,
+        }}>▶</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {influencer.name}
+            </span>
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 6, flexShrink: 0,
+              background: influencer.type === 'pay' ? 'rgba(220,50,80,0.12)' : 'rgba(40,160,100,0.12)',
+              color: influencer.type === 'pay' ? 'var(--danger)' : 'var(--success)',
+            }}>
+              {influencer.type === 'pay' ? '지급' : '수취'}
+            </span>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+            공구 {projects.length}개 · 총매출{' '}
+            <span style={{ color: 'var(--rose)', fontWeight: 700 }}>{fmt(totalSales)}원</span>
+          </div>
+        </div>
+        <button
+          onClick={e => { e.stopPropagation(); handleDelete(); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 12, padding: '2px 4px', flexShrink: 0, opacity: 0.6 }}
+          title="인플루언서 삭제"
+        >✕</button>
+      </div>
+
+      {/* Accordion body */}
+      {open && (
+        <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+          {projects.length === 0 ? (
+            <div style={{ padding: '10px 14px', fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>
+              공구가 없습니다
+            </div>
+          ) : (
+            projects.map(p => (
+              <ProjectRow
+                key={p.id}
+                project={p}
+                salesTotal={salesTotals[p.id] ?? 0}
+                selected={p.id === selectedId}
+                onClick={() => onSelectProject(p.id)}
+                indent
+              />
+            ))
+          )}
+          <div style={{ padding: '8px 14px' }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ width: '100%', fontSize: 11 }}
+              onClick={e => { e.stopPropagation(); onAddProject(); }}
+            >
+              + 새 공구 추가
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── ProjectRow ── */
+
+function ProjectRow({ project: p, salesTotal, selected, onClick, indent }: {
+  project: SProject;
+  salesTotal: number;
+  selected: boolean;
+  onClick: () => void;
+  indent?: boolean;
+}) {
   return (
     <div
       onClick={onClick}
       style={{
-        padding: '12px 14px', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s',
-        background: selected ? 'rgba(180,60,90,0.08)' : 'var(--surface2)',
-        border: `1px solid ${selected ? 'var(--rose)' : 'var(--border)'}`,
+        padding: `9px 14px 9px ${indent ? 32 : 14}px`,
+        cursor: 'pointer',
+        borderBottom: '1px solid var(--border)',
+        background: selected ? 'rgba(180,60,90,0.06)' : 'transparent',
+        display: 'flex', alignItems: 'center', gap: 8,
+        transition: 'background 0.12s',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
-        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', lineHeight: 1.3, flex: 1 }}>{p.name || '(제목 없음)'}</div>
-        <span style={{
-          fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 8, flexShrink: 0,
-          background: p.type === 'pay' ? 'rgba(220,50,80,0.12)' : 'rgba(40,160,100,0.12)',
-          color: p.type === 'pay' ? 'var(--danger)' : 'var(--success)',
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontWeight: 600, fontSize: 12,
+          color: selected ? 'var(--rose)' : 'var(--text)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          {p.type === 'pay' ? '지급' : '수취'}
-        </span>
-      </div>
-      {p.brand && <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 2 }}>{p.brand}</div>}
-      {p.influencer && <div style={{ fontSize: 11, color: 'var(--text3)' }}>👤 {p.influencer}</div>}
-      {(p.start_date || p.end_date) && (
-        <div style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+          {p.name || '(제목 없음)'}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1, fontFamily: "'DM Mono', monospace" }}>
           {p.start_date || '—'} ~ {p.end_date || '—'}
         </div>
-      )}
-      <div style={{ marginTop: 6 }}>
-        <span style={{
-          fontSize: 9, padding: '2px 7px', borderRadius: 8, fontWeight: 700,
-          background: p.status === 'active' ? 'rgba(43,158,148,.12)' : 'rgba(150,150,160,.1)',
-          color: p.status === 'active' ? '#2b9e94' : 'var(--text3)',
-        }}>
-          {p.status === 'active' ? '진행중' : '완료'}
-        </span>
+      </div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--rose)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+        {salesTotal ? `${fmt(salesTotal)}원` : '—'}
       </div>
     </div>
   );
 }
 
-/* ── NewProjectModal ── */
+/* ── NewInfluencerModal ── */
 
-const EMPTY_FORM = { name: '', brand: '', influencer: '', type: 'pay' as SType, start_date: '', end_date: '', status: 'active' as SStatus };
-
-function NewProjectModal({ onClose, onCreate }: { onClose: () => void; onCreate: (p: SProject) => void }) {
-  const [form, setForm] = useState(EMPTY_FORM);
+function NewInfluencerModal({ onClose, onCreate }: { onClose: () => void; onCreate: (i: SInfluencer) => void }) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState<SType>('receive');
+  const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
-  function upd<K extends keyof typeof EMPTY_FORM>(k: K, v: (typeof EMPTY_FORM)[K]) {
+  async function handleCreate() {
+    if (!name.trim()) return;
+    setSaving(true);
+    const { data, error } = await supabase.from('settlement_influencers').insert({
+      name: name.trim(), type, notes,
+    }).select().single();
+    if (!error && data) onCreate(data as SInfluencer);
+    setSaving(false);
+  }
+
+  return (
+    <>
+      <div className="dp-backdrop" onClick={onClose} />
+      <div className="modal" style={{ zIndex: 1100 }}>
+        <div className="modal-title">새 인플루언서 추가</div>
+        <FormRow label="인플루언서명 *">
+          <input
+            className="input" placeholder="예: 루시맘" value={name} autoFocus
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleCreate()}
+          />
+        </FormRow>
+        <FormRow label="구분">
+          <select className="input" value={type} onChange={e => setType(e.target.value as SType)}>
+            <option value="receive">수취</option>
+            <option value="pay">지급</option>
+          </select>
+        </FormRow>
+        <FormRow label="메모">
+          <textarea className="dp-notes" style={{ minHeight: 70 }} value={notes} onChange={e => setNotes(e.target.value)} />
+        </FormRow>
+        <div className="modal-foot">
+          <button className="btn btn-ghost" onClick={onClose}>취소</button>
+          <button className="btn btn-rose" onClick={handleCreate} disabled={saving || !name.trim()}>
+            {saving ? '생성 중...' : '생성'}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ── NewProjectModal ── */
+
+const EMPTY_PROJECT_FORM = { name: '', brand: '', type: 'pay' as SType, start_date: '', end_date: '', status: 'active' as SStatus };
+
+function NewProjectModal({ influencerId, onClose, onCreate }: {
+  influencerId: string;
+  onClose: () => void;
+  onCreate: (p: SProject) => void;
+}) {
+  const [form, setForm] = useState(EMPTY_PROJECT_FORM);
+  const [saving, setSaving] = useState(false);
+
+  function upd<K extends keyof typeof EMPTY_PROJECT_FORM>(k: K, v: (typeof EMPTY_PROJECT_FORM)[K]) {
     setForm(prev => ({ ...prev, [k]: v }));
   }
 
@@ -285,7 +510,8 @@ function NewProjectModal({ onClose, onCreate }: { onClose: () => void; onCreate:
     if (!form.name.trim()) return;
     setSaving(true);
     const { data, error } = await supabase.from('settlement_projects').insert({
-      name: form.name, brand: form.brand, influencer: form.influencer,
+      influencer_id: influencerId,
+      name: form.name, brand: form.brand, influencer: '',
       type: form.type, start_date: form.start_date || null, end_date: form.end_date || null,
       status: form.status, notes: '',
     }).select().single();
@@ -297,29 +523,21 @@ function NewProjectModal({ onClose, onCreate }: { onClose: () => void; onCreate:
     <>
       <div className="dp-backdrop" onClick={onClose} />
       <div className="modal" style={{ zIndex: 1100 }}>
-        <div className="modal-title">새 정산 프로젝트</div>
-        <FormRow label="프로젝트명 *">
-          <input className="input" placeholder="예: 이너피움 3월 공구" value={form.name} onChange={e => upd('name', e.target.value)} />
+        <div className="modal-title">새 공구 추가</div>
+        <FormRow label="공구명 *">
+          <input
+            className="input" placeholder="예: 이너피움 3월 공구" value={form.name} autoFocus
+            onChange={e => upd('name', e.target.value)}
+          />
         </FormRow>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <FormRow label="브랜드">
             <input className="input" placeholder="이너피움" value={form.brand} onChange={e => upd('brand', e.target.value)} />
           </FormRow>
-          <FormRow label="인플루언서">
-            <input className="input" placeholder="인플루언서명" value={form.influencer} onChange={e => upd('influencer', e.target.value)} />
-          </FormRow>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <FormRow label="구분">
             <select className="input" value={form.type} onChange={e => upd('type', e.target.value as SType)}>
               <option value="pay">지급</option>
               <option value="receive">수취</option>
-            </select>
-          </FormRow>
-          <FormRow label="상태">
-            <select className="input" value={form.status} onChange={e => upd('status', e.target.value as SStatus)}>
-              <option value="active">진행중</option>
-              <option value="done">완료</option>
             </select>
           </FormRow>
         </div>
@@ -376,7 +594,6 @@ function ProjectPanel({ project, onClose, onUpdate, onDelete }: {
           <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)' }}>{project.name}</div>
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
             {project.brand && <span>{project.brand} · </span>}
-            {project.influencer && <span>{project.influencer} · </span>}
             <span style={{ color: project.type === 'pay' ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>
               {project.type === 'pay' ? '지급' : '수취'}
             </span>
@@ -447,7 +664,7 @@ function BasicInfoTab({ project, onUpdate, onDelete }: {
   async function handleSave() {
     setSaving(true);
     const { error } = await supabase.from('settlement_projects').update({
-      name: draft.name, brand: draft.brand, influencer: draft.influencer,
+      name: draft.name, brand: draft.brand,
       type: draft.type, start_date: draft.start_date || null, end_date: draft.end_date || null,
       status: draft.status, notes: draft.notes,
     }).eq('id', project.id);
@@ -456,24 +673,19 @@ function BasicInfoTab({ project, onUpdate, onDelete }: {
   }
 
   async function handleDelete() {
-    if (!confirm(`"${project.name}" 프로젝트를 삭제할까요? 매출 데이터도 함께 삭제됩니다.`)) return;
+    if (!confirm(`"${project.name}" 공구를 삭제할까요? 매출 데이터도 함께 삭제됩니다.`)) return;
     await supabase.from('settlement_projects').delete().eq('id', project.id);
     onDelete(project.id);
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 520 }}>
-      <FormRow label="프로젝트명">
+      <FormRow label="공구명">
         <input className="input" value={draft.name} onChange={e => upd('name', e.target.value)} />
       </FormRow>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <FormRow label="브랜드">
-          <input className="input" value={draft.brand} onChange={e => upd('brand', e.target.value)} />
-        </FormRow>
-        <FormRow label="인플루언서">
-          <input className="input" value={draft.influencer} onChange={e => upd('influencer', e.target.value)} />
-        </FormRow>
-      </div>
+      <FormRow label="브랜드">
+        <input className="input" value={draft.brand} onChange={e => upd('brand', e.target.value)} />
+      </FormRow>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <FormRow label="구분 (지급/수취)">
           <select className="input" value={draft.type} onChange={e => upd('type', e.target.value as SType)}>
@@ -555,7 +767,6 @@ function OrderTab({ entries, setEntries, totalOrders, totalQty }: {
 
   return (
     <div>
-      {/* Summary bar */}
       {entries.length > 0 && (
         <div style={{ display: 'flex', gap: 16, padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 16, alignItems: 'center' }}>
           <span style={{ fontSize: 12 }}>총 주문건수 <strong style={{ color: 'var(--rose)' }}>{fmt(totalOrders)}건</strong></span>
@@ -564,7 +775,6 @@ function OrderTab({ entries, setEntries, totalOrders, totalQty }: {
         </div>
       )}
 
-      {/* Platform tabs */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {PLATFORMS.map(p => (
           <button key={p} className={`btn btn-sm ${platform === p ? 'btn-rose' : 'btn-ghost'}`}
@@ -572,7 +782,6 @@ function OrderTab({ entries, setEntries, totalOrders, totalQty }: {
         ))}
       </div>
 
-      {/* Drop zone */}
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
@@ -592,7 +801,6 @@ function OrderTab({ entries, setEntries, totalOrders, totalQty }: {
         {error && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--rose)', fontWeight: 600 }}>{error}</div>}
       </div>
 
-      {/* Entries */}
       {entries.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
           {entries.map((entry, idx) => (
@@ -607,7 +815,6 @@ function OrderTab({ entries, setEntries, totalOrders, totalQty }: {
         </div>
       )}
 
-      {/* Preview table */}
       {entries.length > 0 && (
         <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid var(--border)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
@@ -713,7 +920,6 @@ function SalesTab({ projectId, rows, setRows }: {
         const qk = findKey(r, qtyKeys);
         const mk = findKey(r, memoKeys);
         let dateStr = dk2 ? String(r[dk2]) : '';
-        // Handle Excel serial date number
         if (dateStr && /^\d+$/.test(dateStr)) {
           const d = XLSX.SSF.parse_date_code(parseInt(dateStr));
           dateStr = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
@@ -736,7 +942,6 @@ function SalesTab({ projectId, rows, setRows }: {
 
   async function handleSave() {
     setSaving(true);
-    // Upsert all rows to Supabase
     const upsertData = localRows.map(r => ({
       ...(r._new ? {} : { id: r.id }),
       project_id: r.project_id,
@@ -764,13 +969,11 @@ function SalesTab({ projectId, rows, setRows }: {
 
   return (
     <div>
-      {/* KPI */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
         <KpiBox label="누적 총매출" value={`${fmt(totalSales)}원`} />
         <KpiBox label="누적 총수량" value={`${fmt(totalQty)}개`} />
       </div>
 
-      {/* Upload + Add buttons */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
         <label style={{ cursor: 'pointer' }}>
           <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
@@ -782,7 +985,6 @@ function SalesTab({ projectId, rows, setRows }: {
       </div>
       {uploadError && <div style={{ color: 'var(--rose)', fontSize: 11, marginBottom: 10 }}>{uploadError}</div>}
 
-      {/* Table */}
       {localRows.length > 0 ? (
         <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid var(--border)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
@@ -850,14 +1052,11 @@ function SettlementTab({ project, totalOrders, totalQty, dailyRows, totalSales, 
 
   function downloadExcel() {
     const wb = XLSX.utils.book_new();
-
-    // Build sheet data
     const data: unknown[][] = [
       ['정산서'],
       [],
-      ['프로젝트명', project.name],
+      ['공구명', project.name],
       ['브랜드', project.brand],
-      ['인플루언서', project.influencer],
       ['기간', `${project.start_date || '—'} ~ ${project.end_date || '—'}`],
       ['구분', project.type === 'pay' ? '지급' : '수취'],
       ['상태', project.status === 'active' ? '진행중' : '완료'],
@@ -872,7 +1071,6 @@ function SettlementTab({ project, totalOrders, totalQty, dailyRows, totalSales, 
       [],
       ['총 매출', totalSales, totalSalesQty, ''],
     ];
-
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = [{ wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 24 }];
     XLSX.utils.book_append_sheet(wb, ws, '정산서');
@@ -885,18 +1083,15 @@ function SettlementTab({ project, totalOrders, totalQty, dailyRows, totalSales, 
         <button className="btn btn-rose btn-sm" onClick={downloadExcel}>⬇ 엑셀 다운로드</button>
       </div>
 
-      {/* Preview */}
       <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 12, padding: '20px 24px', maxWidth: 560 }}>
         <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, borderBottom: '1px solid var(--border)', paddingBottom: 12 }}>
           정산서 미리보기
         </div>
 
-        {/* Project info */}
         <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr', gap: '6px 12px', marginBottom: 16, fontSize: 12 }}>
           {[
-            ['프로젝트명', project.name],
+            ['공구명', project.name],
             ['브랜드', project.brand],
-            ['인플루언서', project.influencer],
             ['기간', `${project.start_date || '—'} ~ ${project.end_date || '—'}`],
             ['구분', project.type === 'pay' ? '지급' : '수취'],
           ].map(([label, value]) => (
@@ -907,7 +1102,6 @@ function SettlementTab({ project, totalOrders, totalQty, dailyRows, totalSales, 
           ))}
         </div>
 
-        {/* Order summary */}
         {(totalOrders > 0 || totalQty > 0) && (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>발주서 요약</div>
@@ -918,7 +1112,6 @@ function SettlementTab({ project, totalOrders, totalQty, dailyRows, totalSales, 
           </div>
         )}
 
-        {/* Daily sales table */}
         {sorted.length > 0 && (
           <>
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', marginBottom: 8 }}>일별 매출</div>
@@ -947,7 +1140,6 @@ function SettlementTab({ project, totalOrders, totalQty, dailyRows, totalSales, 
           </>
         )}
 
-        {/* Total */}
         <div style={{ background: 'rgba(180,60,90,0.06)', border: '1px solid rgba(180,60,90,0.2)', borderRadius: 10, padding: '12px 16px', display: 'flex', gap: 24 }}>
           <span style={{ fontSize: 13 }}>최종 총매출 <strong style={{ color: 'var(--rose)', fontSize: 15 }}>{fmt(totalSales)}원</strong></span>
           <span style={{ fontSize: 13 }}>총수량 <strong style={{ color: 'var(--rose)' }}>{fmt(totalSalesQty)}개</strong></span>
