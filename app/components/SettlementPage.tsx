@@ -731,12 +731,12 @@ function BasicInfoTab({ project, onUpdate, onDelete }: {
 
   async function handleSave() {
     setSaving(true);
-    const { error } = await supabase.from('settlement_projects').update({
+    await supabase.from('settlement_projects').update({
       name: draft.name, brand: draft.brand,
       type: draft.type, start_date: draft.start_date || null, end_date: draft.end_date || null,
       status: draft.status, notes: draft.notes,
     }).eq('id', project.id);
-    if (!error) onUpdate(draft);
+    onUpdate(draft); // always sync local state regardless of DB result
     setSaving(false);
   }
 
