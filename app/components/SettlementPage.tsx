@@ -374,16 +374,25 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
               공구가 없습니다
             </div>
           ) : (
-            projects.map(p => (
-              <ProjectRow
-                key={p.id}
-                project={p}
-                salesTotal={salesTotals[p.id] ?? 0}
-                selected={p.id === selectedId}
-                onClick={() => onSelectProject(p.id)}
-                indent
-              />
-            ))
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {[...projects]
+                .sort((a, b) => {
+                  if (!a.start_date && !b.start_date) return 0;
+                  if (!a.start_date) return 1;
+                  if (!b.start_date) return -1;
+                  return b.start_date.localeCompare(a.start_date);
+                })
+                .map(p => (
+                  <ProjectRow
+                    key={p.id}
+                    project={p}
+                    salesTotal={salesTotals[p.id] ?? 0}
+                    selected={p.id === selectedId}
+                    onClick={() => onSelectProject(p.id)}
+                    indent
+                  />
+                ))}
+            </div>
           )}
           <div style={{ padding: '8px 14px' }}>
             <button
