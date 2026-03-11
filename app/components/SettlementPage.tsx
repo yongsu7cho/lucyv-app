@@ -208,16 +208,14 @@ export default function SettlementPage() {
   const unassigned = projects.filter(p => !p.influencer_id);
 
   return (
-    <div className="fade-in" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 130px)', overflow: 'hidden' }}>
-      {/* ── Left: influencer accordion list ── */}
-      <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexShrink: 0 }}>
+    <div className="fade-in" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      {/* ── Left: influencer accordion list (natural height, page scrolls) ── */}
+      <div style={{ width: 300, flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>정산 관리</span>
           <button className="btn btn-rose btn-sm" onClick={() => setShowNewInf(true)}>+ 인플루언서(프로젝트) 추가</button>
         </div>
-        {/* scroll container: flex와 overflow를 분리 */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {loading ? (
             <p style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: 20 }}>불러오는 중...</p>
           ) : influencers.length === 0 && unassigned.length === 0 ? (
@@ -286,12 +284,11 @@ export default function SettlementPage() {
               )}
             </>
           )}
-          </div>
         </div>
       </div>
 
-      {/* ── Right: detail panel ── */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      {/* ── Right: detail panel (sticky so it stays in view while left scrolls) ── */}
+      <div style={{ flex: 1, position: 'sticky', top: 20, height: 'calc(100vh - 150px)' }}>
         {selected ? (
           <ProjectPanel
             key={selected.id}
