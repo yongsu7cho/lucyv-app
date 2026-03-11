@@ -213,7 +213,7 @@ export default function SettlementPage() {
       <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>정산 관리</span>
-          <button className="btn btn-rose btn-sm" onClick={() => setShowNewInf(true)}>+ 인플루언서 추가</button>
+          <button className="btn btn-rose btn-sm" onClick={() => setShowNewInf(true)}>+ 인플루언서(프로젝트) 추가</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {loading ? (
@@ -240,6 +240,9 @@ export default function SettlementPage() {
                       setProjects(prev => prev.filter(p => p.influencer_id !== id));
                       if (selected?.influencer_id === id) setSelectedId(null);
                     }}
+                    onStatusToggle={(id, newStatus) =>
+                      setProjects(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p))
+                    }
                   />
                 );
               })}
@@ -256,6 +259,9 @@ export default function SettlementPage() {
                       salesTotal={salesTotals[p.id] ?? 0}
                       selected={p.id === selectedId}
                       onClick={() => setSelectedId(p.id)}
+                      onStatusToggle={(id, newStatus) =>
+                        setProjects(prev => prev.map(q => q.id === id ? { ...q, status: newStatus } : q))
+                      }
                     />
                   ))}
                 </div>
@@ -302,7 +308,7 @@ export default function SettlementPage() {
 
 /* ── InfluencerAccordionItem ── */
 
-function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales, selectedId, onSelectProject, onAddProject, onDeleteInfluencer }: {
+function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales, selectedId, onSelectProject, onAddProject, onDeleteInfluencer, onStatusToggle }: {
   influencer: SInfluencer;
   projects: SProject[];
   salesTotals: Record<string, number>;
@@ -311,6 +317,7 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
   onSelectProject: (id: string) => void;
   onAddProject: () => void;
   onDeleteInfluencer: (id: string) => void;
+  onStatusToggle: (id: string, newStatus: SStatus) => void;
 }) {
   const hasSelected = projects.some(p => p.id === selectedId);
   const [open, setOpen] = useState(hasSelected);
@@ -377,6 +384,10 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
             <div style={{ maxHeight: 320, overflowY: 'auto' }}>
               {[...projects]
                 .sort((a, b) => {
+                  // 진행중 먼저, 완료 아래
+                  const statusOrder = (s: SStatus) => s === 'active' ? 0 : 1;
+                  if (statusOrder(a.status) !== statusOrder(b.status)) return statusOrder(a.status) - statusOrder(b.status);
+                  // 같은 상태 안에서 최신순
                   if (!a.start_date && !b.start_date) return 0;
                   if (!a.start_date) return 1;
                   if (!b.start_date) return -1;
@@ -389,6 +400,7 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
                     salesTotal={salesTotals[p.id] ?? 0}
                     selected={p.id === selectedId}
                     onClick={() => onSelectProject(p.id)}
+                    onStatusToggle={onStatusToggle}
                     indent
                   />
                 ))}
@@ -400,7 +412,7 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
               style={{ width: '100%', fontSize: 11 }}
               onClick={e => { e.stopPropagation(); onAddProject(); }}
             >
-              + 새 공구 추가
+              + 새 공구&PJT 추가
             </button>
           </div>
         </div>
@@ -411,13 +423,22 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
 
 /* ── ProjectRow ── */
 
-function ProjectRow({ project: p, salesTotal, selected, onClick, indent }: {
+function ProjectRow({ project: p, salesTotal, selected, onClick, indent, onStatusToggle }: {
   project: SProject;
   salesTotal: number;
   selected: boolean;
   onClick: () => void;
   indent?: boolean;
+  onStatusToggle?: (id: string, newStatus: SStatus) => void;
 }) {
+  async function handleStatusClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!onStatusToggle) return;
+    const newStatus: SStatus = p.status === 'active' ? 'done' : 'active';
+    await supabase.from('settlement_projects').update({ status: newStatus }).eq('id', p.id);
+    onStatusToggle(p.id, newStatus);
+  }
+
   return (
     <div
       onClick={onClick}
@@ -431,12 +452,25 @@ function ProjectRow({ project: p, salesTotal, selected, onClick, indent }: {
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontWeight: 600, fontSize: 12,
-          color: selected ? 'var(--rose)' : 'var(--text)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          {p.name || '(제목 없음)'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+          <div style={{
+            fontWeight: 600, fontSize: 12,
+            color: selected ? 'var(--rose)' : 'var(--text)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {p.name || '(제목 없음)'}
+          </div>
+          <span
+            onClick={handleStatusClick}
+            title="클릭하여 상태 변경"
+            style={{
+              fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, flexShrink: 0, cursor: 'pointer',
+              background: p.status === 'active' ? 'rgba(40,160,100,0.14)' : 'rgba(140,140,140,0.14)',
+              color: p.status === 'active' ? 'var(--success)' : 'var(--text3)',
+            }}
+          >
+            {p.status === 'active' ? '진행중' : '완료'}
+          </span>
         </div>
         <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1, fontFamily: "'DM Mono', monospace" }}>
           {p.start_date || '—'} ~ {p.end_date || '—'}
@@ -532,7 +566,7 @@ function NewProjectModal({ influencerId, onClose, onCreate }: {
     <>
       <div className="dp-backdrop" onClick={onClose} />
       <div className="modal" style={{ zIndex: 1100 }}>
-        <div className="modal-title">새 공구 추가</div>
+        <div className="modal-title">새 공구&PJT 추가</div>
         <FormRow label="공구명 *">
           <input
             className="input" placeholder="예: 이너피움 3월 공구" value={form.name} autoFocus
@@ -558,6 +592,12 @@ function NewProjectModal({ influencerId, onClose, onCreate }: {
             <input className="input" type="date" value={form.end_date} onChange={e => upd('end_date', e.target.value)} />
           </FormRow>
         </div>
+        <FormRow label="상태">
+          <select className="input" value={form.status} onChange={e => upd('status', e.target.value as SStatus)}>
+            <option value="active">진행중</option>
+            <option value="done">완료</option>
+          </select>
+        </FormRow>
         <div className="modal-foot">
           <button className="btn btn-ghost" onClick={onClose}>취소</button>
           <button className="btn btn-rose" onClick={handleCreate} disabled={saving || !form.name.trim()}>
