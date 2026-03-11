@@ -274,7 +274,7 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
   );
 }
 
-/* ── ActionList with drag-and-drop ── */
+/* ── ActionList — mouse-event based drag and drop ── */
 
 interface ActionListProps {
   actions: ActionItem[];
@@ -285,106 +285,168 @@ interface ActionListProps {
 }
 
 function ActionList({ actions, onReorder, onToggle, onUpdateText, onRemove }: ActionListProps) {
-  const dragId = useRef<number | null>(null);
-  const [overId, setOverId] = useState<number | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
+  const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
 
-  // Handle starts only from the drag handle (span with draggable)
-  function handleDragStart(e: React.DragEvent, id: number) {
-    dragId.current = id;
-    setDraggingId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(id));
-  }
+  // Refs so event listener closures always see fresh values
+  const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const dragIdRef = useRef<number | null>(null);
+  const overIdRef = useRef<number | null>(null);
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+  const onReorderRef = useRef(onReorder);
+  onReorderRef.current = onReorder;
 
-  function handleDragOver(e: React.DragEvent, id: number, done: boolean) {
-    e.preventDefault(); // Must always prevent default to allow drop
-    e.dataTransfer.dropEffect = 'move';
-    if (done || id === dragId.current) return;
-    setOverId(id);
-  }
-
-  function handleDragLeave(e: React.DragEvent, id: number) {
-    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
-      setOverId(prev => prev === id ? null : prev);
-    }
-  }
-
-  function handleDrop(e: React.DragEvent, targetId: number, done: boolean) {
+  const handleHandleMouseDown = useCallback((e: React.MouseEvent, id: number) => {
+    if (e.button !== 0) return;
     e.preventDefault();
-    setOverId(null);
-    const fromId = dragId.current;
-    if (fromId === null || fromId === targetId || done) {
-      dragId.current = null;
+
+    dragIdRef.current = id;
+    overIdRef.current = null;
+    let started = false;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!started) {
+        started = true;
+        setDraggingId(id);
+        document.body.style.userSelect = 'none';
+      }
+      setGhostPos({ x: ev.clientX, y: ev.clientY });
+
+      // Find which incomplete item the cursor is over
+      const incomplete = actionsRef.current.filter(a => !a.done && a.id !== id);
+      let hovered: number | null = null;
+      for (const action of incomplete) {
+        const el = rowRefs.current.get(action.id);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (ev.clientY >= rect.top && ev.clientY <= rect.bottom) {
+          hovered = action.id;
+          break;
+        }
+      }
+      overIdRef.current = hovered;
+      setOverId(hovered);
+    };
+
+    const onMouseUp = () => {
+      const fromId = dragIdRef.current;
+      const toId = overIdRef.current;
+
+      // Cleanup
+      document.body.style.userSelect = '';
+      dragIdRef.current = null;
+      overIdRef.current = null;
       setDraggingId(null);
-      return;
+      setOverId(null);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+
+      // Commit reorder if valid
+      if (started && fromId !== null && toId !== null && fromId !== toId) {
+        const cur = actionsRef.current;
+        const incomplete = cur.filter(a => !a.done);
+        const complete = cur.filter(a => a.done);
+        const fromIdx = incomplete.findIndex(a => a.id === fromId);
+        const toIdx = incomplete.findIndex(a => a.id === toId);
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const reordered = [...incomplete];
+          const [moved] = reordered.splice(fromIdx, 1);
+          reordered.splice(toIdx, 0, moved);
+          onReorderRef.current([...reordered, ...complete]);
+        }
+      }
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, []);
+
+  // Build preview-reordered list
+  const incomplete = actions.filter(a => !a.done);
+  const complete = actions.filter(a => a.done);
+  let displayIncomplete = [...incomplete];
+  if (draggingId !== null && overId !== null) {
+    const fromIdx = displayIncomplete.findIndex(a => a.id === draggingId);
+    const toIdx = displayIncomplete.findIndex(a => a.id === overId);
+    if (fromIdx !== -1 && toIdx !== -1) {
+      const r = [...displayIncomplete];
+      const [mv] = r.splice(fromIdx, 1);
+      r.splice(toIdx, 0, mv);
+      displayIncomplete = r;
     }
-
-    const incomplete = actions.filter(a => !a.done);
-    const complete = actions.filter(a => a.done);
-
-    const fromIdx = incomplete.findIndex(a => a.id === fromId);
-    const toIdx = incomplete.findIndex(a => a.id === targetId);
-    if (fromIdx === -1 || toIdx === -1) {
-      dragId.current = null;
-      setDraggingId(null);
-      return;
-    }
-
-    const reordered = [...incomplete];
-    const [moved] = reordered.splice(fromIdx, 1);
-    reordered.splice(toIdx, 0, moved);
-
-    dragId.current = null;
-    setDraggingId(null);
-    onReorder([...reordered, ...complete]);
   }
-
-  function handleDragEnd() {
-    setOverId(null);
-    setDraggingId(null);
-    dragId.current = null;
-  }
+  const displayActions = [...displayIncomplete, ...complete];
+  const draggingAction = draggingId !== null ? actions.find(a => a.id === draggingId) : null;
 
   return (
-    <div className="dp-action-list">
-      {actions.map(a => (
-        <div
-          key={a.id}
-          className={[
-            'dp-action-row',
-            draggingId === a.id ? 'dp-dragging' : '',
-            overId === a.id ? 'dp-drag-over' : '',
-          ].filter(Boolean).join(' ')}
-          onDragOver={e => handleDragOver(e, a.id, a.done)}
-          onDragLeave={e => handleDragLeave(e, a.id)}
-          onDrop={e => handleDrop(e, a.id, a.done)}
-        >
-          {/* Drag handle — draggable is only here, not on the whole row */}
-          <span
-            className="dp-drag-handle"
-            draggable={!a.done}
-            onDragStart={a.done ? undefined : e => handleDragStart(e, a.id)}
-            onDragEnd={handleDragEnd}
-            style={{ cursor: a.done ? 'default' : 'grab', opacity: a.done ? 0.2 : 0.5 }}
-          >⋮⋮</span>
-          <input
-            type="checkbox"
-            className="dp-action-check"
-            checked={a.done}
-            onChange={() => onToggle(a.id)}
-          />
-          <input
-            type="text"
-            className={`dp-action-text${a.done ? ' done' : ''}`}
-            placeholder="할 일 입력..."
-            value={a.text}
-            onChange={e => onUpdateText(a.id, e.target.value)}
-          />
-          <button className="dp-action-del" onClick={() => onRemove(a.id)}>✕</button>
+    <>
+      {/* Ghost clone — follows cursor */}
+      {draggingAction && (
+        <div style={{
+          position: 'fixed',
+          left: ghostPos.x + 14,
+          top: ghostPos.y - 14,
+          pointerEvents: 'none',
+          zIndex: 9999,
+          background: 'var(--surface)',
+          border: '1px solid var(--rose)',
+          borderRadius: 8,
+          padding: '5px 14px 5px 10px',
+          fontSize: 12,
+          color: 'var(--text)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+          maxWidth: 260,
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+          opacity: 0.92,
+        }}>
+          <span style={{ marginRight: 8, color: 'var(--rose)', opacity: 0.6 }}>⋮⋮</span>
+          {draggingAction.text || '(빈 항목)'}
         </div>
-      ))}
-    </div>
+      )}
+
+      <div className="dp-action-list">
+        {displayActions.map(a => (
+          <div
+            key={a.id}
+            ref={el => { if (el) rowRefs.current.set(a.id, el); else rowRefs.current.delete(a.id); }}
+            className={[
+              'dp-action-row',
+              draggingId === a.id ? 'dp-dragging' : '',
+              overId === a.id ? 'dp-drag-over' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            {/* Only the handle triggers drag */}
+            <span
+              className="dp-drag-handle"
+              onMouseDown={a.done ? undefined : e => handleHandleMouseDown(e, a.id)}
+              style={{
+                cursor: a.done ? 'default' : draggingId === a.id ? 'grabbing' : 'grab',
+                opacity: a.done ? 0.2 : 0.5,
+                userSelect: 'none',
+              }}
+            >⋮⋮</span>
+            <input
+              type="checkbox"
+              className="dp-action-check"
+              checked={a.done}
+              onChange={() => onToggle(a.id)}
+            />
+            <input
+              type="text"
+              className={`dp-action-text${a.done ? ' done' : ''}`}
+              placeholder="할 일 입력..."
+              value={a.text}
+              onChange={e => onUpdateText(a.id, e.target.value)}
+            />
+            <button className="dp-action-del" onClick={() => onRemove(a.id)}>✕</button>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
