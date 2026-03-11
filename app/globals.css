@@ -1002,6 +1002,7 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   cursor: pointer; padding: 4px 2px; font-family: 'Pretendard Variable', Pretendard, sans-serif;
 }
 .dp-add-action-btn:hover { opacity: 0.75; }
+.dp-add-action-inline { margin-left: auto; font-size: 10px; }
 .dp-foot {
   padding: 14px 22px; border-top: 1px solid var(--border);
   flex-shrink: 0; display: flex; justify-content: flex-end; gap: 8px;
