@@ -210,19 +210,35 @@ export default function SettlementPage() {
   return (
     <div className="fade-in" style={{ display: 'flex', gap: 20, height: 'calc(100vh - 130px)', overflow: 'hidden' }}>
       {/* ── Left: influencer accordion list ── */}
-      <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexShrink: 0 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>정산 관리</span>
           <button className="btn btn-rose btn-sm" onClick={() => setShowNewInf(true)}>+ 인플루언서(프로젝트) 추가</button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
           {loading ? (
             <p style={{ color: 'var(--text3)', fontSize: 12, textAlign: 'center', padding: 20 }}>불러오는 중...</p>
           ) : influencers.length === 0 && unassigned.length === 0 ? (
             <div className="empty"><div className="empty-icon">₩</div><p>인플루언서를 추가해보세요</p></div>
           ) : (
             <>
-              {influencers.map(inf => {
+              {[...influencers]
+                .sort((a, b) => {
+                  const aProjs = projects.filter(p => p.influencer_id === a.id);
+                  const bProjs = projects.filter(p => p.influencer_id === b.id);
+                  const aHasActive = aProjs.some(p => p.status === 'active');
+                  const bHasActive = bProjs.some(p => p.status === 'active');
+                  // 진행중 있으면 위로
+                  if (aHasActive !== bHasActive) return aHasActive ? -1 : 1;
+                  // 둘 다 진행중 있으면: 가장 최근 active start_date 기준 내림차순
+                  if (aHasActive && bHasActive) {
+                    const aLatest = aProjs.filter(p => p.status === 'active').map(p => p.start_date).filter(Boolean).sort().reverse()[0] ?? '';
+                    const bLatest = bProjs.filter(p => p.status === 'active').map(p => p.start_date).filter(Boolean).sort().reverse()[0] ?? '';
+                    return bLatest.localeCompare(aLatest);
+                  }
+                  return 0;
+                })
+                .map(inf => {
                 const infProjects = projects.filter(p => p.influencer_id === inf.id);
                 const infTotalSales = infProjects.reduce((s, p) => s + (salesTotals[p.id] ?? 0), 0);
                 return (
@@ -381,7 +397,7 @@ function InfluencerAccordionItem({ influencer, projects, salesTotals, totalSales
               공구가 없습니다
             </div>
           ) : (
-            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <div>
               {[...projects]
                 .sort((a, b) => {
                   // 진행중 먼저, 완료 아래
