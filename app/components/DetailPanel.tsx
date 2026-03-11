@@ -194,6 +194,7 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                       {actions.filter(a => a.done).length}/{actions.length}
                     </span>
                   )}
+                  <button className="dp-add-action-btn dp-add-action-inline" onClick={addAction}>+ 추가</button>
                 </div>
                 {actions.length > 0 && (
                   <ActionList
@@ -204,7 +205,6 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                     onRemove={removeAction}
                   />
                 )}
-                <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
               </div>
 
               <div className="dp-section">
@@ -238,6 +238,7 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                       {actions.filter(a => a.done).length}/{actions.length}
                     </span>
                   )}
+                  <button className="dp-add-action-btn dp-add-action-inline" onClick={addAction}>+ 추가</button>
                 </div>
                 {actions.length > 0 && (
                   <ActionList
@@ -248,7 +249,6 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
                     onRemove={removeAction}
                   />
                 )}
-                <button className="dp-add-action-btn" onClick={addAction}>+ 액션 추가</button>
               </div>
             </>
           )}

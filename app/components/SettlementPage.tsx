@@ -180,6 +180,7 @@ export default function SettlementPage() {
   const [loading, setLoading] = useState(true);
   const [showNewInf, setShowNewInf] = useState(false);
   const [newProjForInf, setNewProjForInf] = useState<string | null>(null);
+  const [toast, setToast] = useState('');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -204,11 +205,24 @@ export default function SettlementPage() {
 
   const selected = projects.find(p => p.id === selectedId) ?? null;
 
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2000);
+  }
+
   // Projects without influencer_id (legacy)
   const unassigned = projects.filter(p => !p.influencer_id);
 
   return (
     <div className="fade-in" style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--text)', color: 'var(--bg)', fontSize: 12, fontWeight: 600,
+          padding: '8px 18px', borderRadius: 20, zIndex: 9999, pointerEvents: 'none',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+        }}>{toast}</div>
+      )}
       {/* ── Left: influencer accordion list (natural height, page scrolls) ── */}
       <div style={{ width: 300, flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -296,6 +310,7 @@ export default function SettlementPage() {
             onClose={() => setSelectedId(null)}
             onUpdate={updated => setProjects(prev => prev.map(p => p.id === updated.id ? updated : p))}
             onDelete={id => { setProjects(prev => prev.filter(p => p.id !== id)); setSelectedId(null); }}
+            onSaved={() => showToast('✓ 저장됐어요')}
           />
         ) : (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -633,11 +648,12 @@ function NewProjectModal({ influencerId, onClose, onCreate }: {
 type TabKey = '기본정보' | '발주서' | '매출' | '정산서';
 const TABS: TabKey[] = ['기본정보', '발주서', '매출', '정산서'];
 
-function ProjectPanel({ project, onClose, onUpdate, onDelete }: {
+function ProjectPanel({ project, onClose, onUpdate, onDelete, onSaved }: {
   project: SProject;
   onClose: () => void;
   onUpdate: (p: SProject) => void;
   onDelete: (id: string) => void;
+  onSaved?: () => void;
 }) {
   const [tab, setTab] = useState<TabKey>('기본정보');
   const [orderEntries, setOrderEntries] = useState<OrderEntry[]>([]);
@@ -690,7 +706,7 @@ function ProjectPanel({ project, onClose, onUpdate, onDelete }: {
       {/* Tab body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
         {tab === '기본정보' && (
-          <BasicInfoTab project={project} onUpdate={onUpdate} onDelete={onDelete} />
+          <BasicInfoTab project={project} onUpdate={onUpdate} onDelete={onDelete} onSaved={onSaved} />
         )}
         {tab === '발주서' && (
           <OrderTab entries={orderEntries} setEntries={setOrderEntries} totalOrders={totalOrders} totalQty={totalQty} />
@@ -715,10 +731,11 @@ function ProjectPanel({ project, onClose, onUpdate, onDelete }: {
 
 /* ── BasicInfoTab ── */
 
-function BasicInfoTab({ project, onUpdate, onDelete }: {
+function BasicInfoTab({ project, onUpdate, onDelete, onSaved }: {
   project: SProject;
   onUpdate: (p: SProject) => void;
   onDelete: (id: string) => void;
+  onSaved?: () => void;
 }) {
   const [draft, setDraft] = useState(project);
   const [saving, setSaving] = useState(false);
@@ -731,12 +748,15 @@ function BasicInfoTab({ project, onUpdate, onDelete }: {
 
   async function handleSave() {
     setSaving(true);
-    await supabase.from('settlement_projects').update({
+    const { error } = await supabase.from('settlement_projects').update({
       name: draft.name, brand: draft.brand,
       type: draft.type, start_date: draft.start_date || null, end_date: draft.end_date || null,
       status: draft.status, notes: draft.notes,
     }).eq('id', project.id);
-    onUpdate(draft); // always sync local state regardless of DB result
+    if (!error) {
+      onUpdate({ ...project, ...draft });
+      onSaved?.();
+    }
     setSaving(false);
   }
 
