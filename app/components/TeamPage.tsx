@@ -50,7 +50,6 @@ export default function TeamPage({ members, setMembers }: TeamPageProps) {
 
   function handlePanelSave(updated: TeamMember) {
     setMembers(members.map(m => m.id === updated.id ? updated : m));
-    setSelectedId(null);
   }
 
   const activeCount = members.filter(m => m.status === 'a').length;
