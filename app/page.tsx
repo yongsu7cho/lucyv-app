@@ -152,7 +152,7 @@ async function syncCalendarEvents(oldMap: CalendarEventMap, newMap: CalendarEven
 
 /* ── Password lock ── */
 const LOCKED_TABS = new Set<TabName>(['settlement', 'sales']);
-const LOCK_PW = '3039';
+const LOCK_PW = '1111';
 const SESSION_KEY = (tab: TabName) => `tab_unlocked_${tab}`;
 
 function isUnlocked(tab: TabName): boolean {
