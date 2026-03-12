@@ -101,6 +101,7 @@ function GoogleCalendarTab() {
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError,   setEventsError]   = useState<string | null>(null);
   const [authError,     setAuthError]     = useState<string | null>(null);
+  const [cacheInfo,     setCacheInfo]     = useState<{ fromCache: boolean; cachedAt: string | null; needsReconnect: boolean }>({ fromCache: false, cachedAt: null, needsReconnect: false });
 
   const [calY, setCalY] = useState(now.getFullYear());
   const [calM, setCalM] = useState(now.getMonth());
@@ -135,9 +136,24 @@ function GoogleCalendarTab() {
     }
   }, []);
 
+  const loadMonthCache = useCallback(async (y: number, m: number, needsReconnect: boolean): Promise<boolean> => {
+    const cacheKey = `calendar-${y}-${String(m + 1).padStart(2, '0')}`;
+    const { data } = await supabase
+      .from('calendar_cache')
+      .select('events, cached_at')
+      .eq('id', cacheKey)
+      .maybeSingle();
+    if (!data?.events) return false;
+    setGcalMap(groupByDate((data.events as GCalEvent[]) ?? []));
+    setCacheInfo({ fromCache: true, cachedAt: data.cached_at, needsReconnect });
+    return true;
+  }, []);
+
   const fetchGcalEvents = useCallback(async (y: number, m: number) => {
     setEventsLoading(true);
     setEventsError(null);
+    setCacheInfo({ fromCache: false, cachedAt: null, needsReconnect: false });
+    const cacheKey = `calendar-${y}-${String(m + 1).padStart(2, '0')}`;
     try {
       const timeMin = new Date(y, m, 1).toISOString();
       const timeMax = new Date(y, m + 1, 0, 23, 59, 59).toISOString();
@@ -147,6 +163,7 @@ function GoogleCalendarTab() {
       if (res.status === 401) {
         setAuthStatus({ connected: false, email: null });
         setAuthError('인증이 만료되었어요. 다시 연동해주세요.');
+        await loadMonthCache(y, m, true);
         return;
       }
       if (!res.ok) {
@@ -156,15 +173,24 @@ function GoogleCalendarTab() {
         } else {
           setEventsError(`일정을 불러오지 못했어요. (${apiMsg || res.status})`);
         }
+        await loadMonthCache(y, m, false);
         return;
       }
-      setGcalMap(groupByDate((data.items ?? []) as GCalEvent[]));
+      const items = (data.items ?? []) as GCalEvent[];
+      setGcalMap(groupByDate(items));
+      // 성공 시 월별 캐시 저장
+      supabase.from('calendar_cache').upsert({
+        id: cacheKey,
+        events: items,
+        cached_at: new Date().toISOString(),
+      });
     } catch {
       setEventsError('일정을 불러오는 데 실패했어요. 잠시 후 다시 시도해주세요.');
+      await loadMonthCache(y, m, false);
     } finally {
       setEventsLoading(false);
     }
-  }, []);
+  }, [loadMonthCache]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -311,7 +337,7 @@ function GoogleCalendarTab() {
     );
   }
 
-  if (!authStatus.connected) {
+  if (!authStatus.connected && !cacheInfo.fromCache) {
     return <GoogleConnectUI onConnect={handleConnect} error={authError} />;
   }
 
@@ -343,10 +369,12 @@ function GoogleCalendarTab() {
             todayKey={todayKey} selDay={selDay} calSources={calSources}
             eventsLoading={eventsLoading} eventsError={eventsError}
             email={authStatus.email}
+            cacheInfo={cacheInfo}
             onPrev={() => changeMonth(-1)}
             onNext={() => changeMonth(1)}
             onToday={() => { setCalY(now.getFullYear()); setCalM(now.getMonth()); setSelDay(dk(now)); }}
             onDisconnect={handleDisconnect}
+            onConnect={handleConnect}
             onDayClick={d => setSelDay(d)}
             onSelectEvent={ev => { setModalError(null); setEventModal({ mode: 'edit', event: ev }); }}
             onNewEvent={date => { setModalError(null); setEventModal({ mode: 'new', date }); }}
@@ -534,10 +562,12 @@ interface GcalConnectedViewProps {
   eventsLoading: boolean;
   eventsError: string | null;
   email: string | null;
+  cacheInfo: { fromCache: boolean; cachedAt: string | null; needsReconnect: boolean };
   onPrev:        () => void;
   onNext:        () => void;
   onToday:       () => void;
   onDisconnect:  () => void;
+  onConnect:     () => void;
   onDayClick:    (date: string) => void;
   onSelectEvent: (ev: GCalEvent) => void;
   onNewEvent:    (date: string)  => void;
@@ -545,26 +575,46 @@ interface GcalConnectedViewProps {
 
 function GcalConnectedView({
   calY, calM, days, gcalMap, todayKey, selDay, calSources,
-  eventsLoading, eventsError, email,
-  onPrev, onNext, onToday, onDisconnect,
+  eventsLoading, eventsError, email, cacheInfo,
+  onPrev, onNext, onToday, onDisconnect, onConnect,
   onDayClick, onSelectEvent, onNewEvent,
 }: GcalConnectedViewProps) {
   const today = todayStr();
+
+  const cacheDateLabel = cacheInfo.cachedAt
+    ? new Date(cacheInfo.cachedAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return (
     <div className="gcal-white">
       {/* Status bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: 'var(--success)', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
-            구글 캘린더 연동됨
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: cacheInfo.needsReconnect ? 'var(--warning, #f59e0b)' : 'var(--success)', flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: cacheInfo.needsReconnect ? 'var(--warning, #f59e0b)' : 'var(--success)', fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
+            {cacheInfo.needsReconnect ? '재연동 필요' : '구글 캘린더 연동됨'}
           </span>
           {email && <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>· {email}</span>}
           {eventsLoading && <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>· 동기화 중...</span>}
         </div>
-        <button className="btn btn-danger btn-sm" onClick={onDisconnect}>연동 해제</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {cacheInfo.needsReconnect && (
+            <button className="btn btn-rose btn-sm" onClick={onConnect}>재연동</button>
+          )}
+          {!cacheInfo.needsReconnect && (
+            <button className="btn btn-danger btn-sm" onClick={onDisconnect}>연동 해제</button>
+          )}
+        </div>
       </div>
+
+      {/* Cache banner */}
+      {cacheInfo.fromCache && (
+        <div style={{ marginBottom: 12, padding: '7px 14px', background: cacheInfo.needsReconnect ? 'rgba(245,158,11,0.08)' : 'rgba(100,116,139,0.08)', border: `1px solid ${cacheInfo.needsReconnect ? 'rgba(245,158,11,0.25)' : 'rgba(100,116,139,0.2)'}`, borderRadius: 8, fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>🗄</span>
+          <span>캐시된 데이터</span>
+          {cacheDateLabel && <span>· 마지막 업데이트: {cacheDateLabel}</span>}
+        </div>
+      )}
 
       {/* Legend */}
       {calSources.length > 0 && (
