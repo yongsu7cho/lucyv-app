@@ -57,7 +57,7 @@ async function tryFetch(
   try {
     calRes = await fetchCalendars(token);
   } catch {
-    return { items: [] };
+    return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
   }
 
   if (calRes.status === 401) return null;
