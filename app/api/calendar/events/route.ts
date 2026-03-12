@@ -74,8 +74,20 @@ async function tryFetch(
     return { items: [] };
   }
 
+  console.log('[calendarList 응답]', JSON.stringify(calData, null, 2));
+
   const calendars = calData.items ?? [];
   if (calendars.length === 0) return { items: [] };
+
+  // primary 단독 테스트
+  try {
+    const primaryRes = await fetchEvents(token, 'primary', timeMin, timeMax);
+    const primaryData = await primaryRes.json();
+    console.log('[primary events 응답] status:', primaryRes.status);
+    console.log('[primary events 응답]', JSON.stringify(primaryData, null, 2));
+  } catch (e) {
+    console.log('[primary events 오류]', e);
+  }
 
   const allItems: unknown[] = [];
   for (const cal of calendars) {
