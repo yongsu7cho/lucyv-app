@@ -1294,9 +1294,9 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   .cal-wrap { grid-template-columns: 1fr; }
   .cday { min-height: 56px; }
 
-  /* DetailPanel → full screen modal */
+  /* DetailPanel */
   .detail-panel {
-    width: 100%;
+    width: 65vw;
     top: 0;
     border-left: none;
     border-radius: 0;
