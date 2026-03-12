@@ -48,6 +48,14 @@ interface MonthSummary {
   main_product_qty: number;
   mktRatio: number;
   net_profit: number;
+  inflow_24: number;
+  inflow_n: number;
+  inflow_cost: number;
+  conversion_rate: number;
+  signup: number;
+  wishlist: number;
+  kakao: number;
+  insta: number;
 }
 
 /* ─────────────────── Column Definitions ─────────────────── */
@@ -188,7 +196,7 @@ function buildMonthlySummary(rows: BrandSaleRow[]): MonthSummary[] {
   for (const r of rows) {
     const month = r.date.slice(0, 7);
     if (!map.has(month)) {
-      map.set(month, { month, total_sales: 0, storefarm: 0, cafe24: 0, etc: 0, marketing_total: 0, purchase_count: 0, main_product_qty: 0, mktRatio: 0, net_profit: 0 });
+      map.set(month, { month, total_sales: 0, storefarm: 0, cafe24: 0, etc: 0, marketing_total: 0, purchase_count: 0, main_product_qty: 0, mktRatio: 0, net_profit: 0, inflow_24: 0, inflow_n: 0, inflow_cost: 0, conversion_rate: 0, signup: 0, wishlist: 0, kakao: 0, insta: 0 });
     }
     const s = map.get(month)!;
     s.total_sales      += r.total_sales      || 0;
@@ -198,40 +206,25 @@ function buildMonthlySummary(rows: BrandSaleRow[]): MonthSummary[] {
     s.marketing_total  += r.marketing_total  || 0;
     s.purchase_count   += r.purchase_count   || 0;
     s.main_product_qty += r.main_product_qty || 0;
+    s.inflow_24        += r.inflow_24        || 0;
+    s.inflow_n         += r.inflow_n         || 0;
+    s.signup           += r.signup           || 0;
+    s.wishlist         += r.wishlist         || 0;
+    s.kakao            += r.kakao            || 0;
+    s.insta            += r.insta            || 0;
   }
   const result = [...map.values()].sort((a, b) => b.month.localeCompare(a.month));
   for (const s of result) {
-    s.mktRatio  = s.total_sales > 0 ? s.marketing_total / s.total_sales * 100 : 0;
-    s.net_profit = s.total_sales - s.marketing_total - (s.purchase_count * 4500) - (s.main_product_qty * 11495);
+    s.mktRatio       = s.total_sales > 0 ? s.marketing_total / s.total_sales * 100 : 0;
+    s.net_profit     = s.total_sales - s.marketing_total - (s.purchase_count * 4500) - (s.main_product_qty * 11495);
+    const totalInflow = s.inflow_24 + s.inflow_n;
+    s.inflow_cost    = totalInflow > 0 ? Math.round(s.marketing_total / totalInflow) : 0;
+    s.conversion_rate = s.inflow_24 > 0 ? Number((s.purchase_count / s.inflow_24 * 100).toFixed(2)) : 0;
   }
   return result;
 }
 
 /* ─────────────────── Custom Tooltips ─────────────────── */
-interface MktRatioPayload {
-  month: string;
-  '마케팅비율(%)': number;
-  total_sales: number;
-  marketing_total: number;
-}
-function MktRatioDot({ cx, cy, payload }: { cx?: number; cy?: number; payload?: MktRatioPayload }) {
-  if (cx == null || cy == null) return null;
-  const ratio = payload?.['마케팅비율(%)'] ?? 0;
-  return <circle cx={cx} cy={cy} r={3.5} fill={mktRatioColor(ratio)} stroke="none" />;
-}
-
-function MktRatioTooltip({ active, payload }: { active?: boolean; payload?: { payload: MktRatioPayload }[] }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', fontSize: 11 }}>
-      <div style={{ fontWeight: 700, marginBottom: 4, color: 'var(--text)' }}>{d.month}</div>
-      <div style={{ color: '#f43f5e', fontWeight: 700 }}>마케팅비율: {d['마케팅비율(%)'].toFixed(1)}%</div>
-      <div style={{ color: 'var(--text2)', marginTop: 2 }}>총매출: ₩{d.total_sales.toLocaleString('ko-KR')}</div>
-      <div style={{ color: 'var(--text2)' }}>마케팅비용: ₩{d.marketing_total.toLocaleString('ko-KR')}</div>
-    </div>
-  );
-}
 
 /* ─────────────────── Calculator helpers ─────────────────── */
 const CALC_ROWS = [
@@ -369,19 +362,31 @@ export default function SalesPage() {
   // 월별 요약
   const monthlySummary = buildMonthlySummary(rows);
 
-  // 분석: 마케팅비율 추이 — monthlySummary와 완전히 동일한 소스 사용
-  const mktRatioChartData = [...monthlySummary]
-    .filter(s => s.total_sales > 0)
-    .reverse()
-    .map(s => ({
-      month:           s.month.slice(5) + '월',
-      '마케팅비율(%)': Number(s.mktRatio.toFixed(1)),
-      total_sales:     s.total_sales,
-      marketing_total: s.marketing_total,
-    }));
-
-  // 분석: 선택한 월 채널 파이 (null → 0 처리, 채널 합계 기준으로 비율 계산)
+  // 분석: 채널 파이
   const pieChannelTotal = (kpiStorefarm || 0) + (kpiCafe24 || 0) + (kpiEtc || 0);
+
+  // 유입수 + 유입비용 차트 (월별)
+  const inflowChartData = [...monthlySummary].reverse().map(s => ({
+    month:      s.month.slice(5) + '월',
+    '카페24유입': s.inflow_24,
+    '네이버유입':  s.inflow_n,
+    '유입비용':   s.inflow_cost,
+  }));
+
+  // 전환률 차트 (월별)
+  const convRateChartData = [...monthlySummary].reverse().map(s => ({
+    month:       s.month.slice(5) + '월',
+    '전환률(%)': s.conversion_rate,
+  }));
+
+  // 회원가입/찜/카카오/인스타 차트 (월별)
+  const engagementChartData = [...monthlySummary].reverse().map(s => ({
+    month:    s.month.slice(5) + '월',
+    '회원가입': s.signup,
+    '찜':      s.wishlist,
+    '카카오':  s.kakao,
+    '인스타':  s.insta,
+  }));
   const pieData = [
     { name: '스토어팜', value: kpiStorefarm || 0 },
     { name: '카페24',   value: kpiCafe24   || 0 },
@@ -747,37 +752,65 @@ export default function SalesPage() {
             )}
 
             {/* 분석 섹션 */}
-            <div style={{ display: 'grid', gridTemplateColumns: tab === 'innerpium' ? '1fr 1fr 1fr' : '1fr 1fr', gap: 12 }}>
 
-              {/* 마케팅비율 월별 라인차트 */}
+            {/* Row 1: 유입수+유입비용 (2/3) + 전환률 (1/3) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12 }}>
+
+              {/* 유입수 + 유입비용 콤보차트 */}
               <div className="card">
                 <div className="card-head">
-                  <div className="card-title">▦ 마케팅비율 추이</div>
+                  <div className="card-title">▦ 유입수 · 유입비용</div>
+                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>스택바: 카페24·네이버 유입 / 라인: 유입비용(원)</span>
                 </div>
                 <div className="card-body" style={{ padding: '8px 10px' }}>
-                  <ResponsiveContainer width="100%" height={120}>
-                    <LineChart data={mktRatioChartData} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <ComposedChart data={inflowChartData} margin={{ top: 4, right: 48, bottom: 0, left: 8 }}>
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
-                        tickFormatter={v => `${v}%`} domain={[0, 100]} width={32} />
-                      <Tooltip content={<MktRatioTooltip />} />
-                      <Line type="monotone" dataKey="마케팅비율(%)" stroke="#94a3b8" strokeWidth={2}
-                        dot={<MktRatioDot />} activeDot={{ r: 5 }} />
-                    </LineChart>
+                      <YAxis yAxisId="bar" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
+                        tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
+                      <YAxis yAxisId="line" orientation="right" tick={{ fontSize: 9, fill: '#f43f5e' }} axisLine={false} tickLine={false}
+                        tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
+                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        formatter={(v: any, name: any) => name === '유입비용' ? [`₩${Number(v??0).toLocaleString('ko-KR')}`, name] : [Number(v??0).toLocaleString('ko-KR'), name]} />
+                      <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
+                      <Bar yAxisId="bar" dataKey="카페24유입" stackId="s" fill="#3b82f6" radius={[0,0,0,0]} />
+                      <Bar yAxisId="bar" dataKey="네이버유입" stackId="s" fill="#10b981" radius={[2,2,0,0]} />
+                      <Line yAxisId="line" type="monotone" dataKey="유입비용" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3, fill: '#f43f5e' }} />
+                    </ComposedChart>
                   </ResponsiveContainer>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 6, fontSize: 9 }}>
-                    {[['≤30%', '#10b981'], ['30~50%', '#f59e0b'], ['>50%', '#f43f5e']].map(([label, color]) => (
-                      <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'var(--text3)' }}>
-                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
-                        {label}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               </div>
 
-              {/* 채널별 비중 파이차트 */}
+              {/* 전환률 라인차트 */}
+              <div className="card">
+                <div className="card-head">
+                  <div className="card-title">▦ 전환률 추이</div>
+                </div>
+                <div className="card-body" style={{ padding: '8px 10px' }}>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={convRateChartData} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
+                      <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
+                        tickFormatter={v => `${v}%`} width={34} />
+                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        formatter={(v: any) => [`${Number(v??0).toFixed(2)}%`, '전환률']} />
+                      <Line type="monotone" dataKey="전환률(%)" stroke="#6366f1" strokeWidth={2}
+                        dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: 채널별 비중 (1/3) + 회원가입/찜/카카오/인스타 (2/3) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12 }}>
+
+              {/* 채널별 비중 파이차트 (compact) */}
               <div className="card">
                 <div className="card-head">
                   <div className="card-title">◉ 채널별 비중</div>
@@ -786,9 +819,9 @@ export default function SalesPage() {
                 <div className="card-body" style={{ padding: '8px 10px' }}>
                   {pieData.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height={110}>
+                      <ResponsiveContainer width="100%" height={90}>
                         <PieChart>
-                          <Pie data={pieData} cx="50%" cy="50%" outerRadius={46} dataKey="value"
+                          <Pie data={pieData} cx="50%" cy="50%" outerRadius={36} dataKey="value"
                             label={({ percent }: { percent?: number }) =>
                               (percent ?? 0) >= 0.05 ? `${((percent ?? 0) * 100).toFixed(0)}%` : ''
                             }
@@ -804,61 +837,51 @@ export default function SalesPage() {
                             formatter={(v: any) => [`₩${Number(v ?? 0).toLocaleString('ko-KR')}`, undefined]} />
                         </PieChart>
                       </ResponsiveContainer>
-                      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 4 }}>
-                        {pieData.map((d, idx) => (
-                          <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--text3)' }}>
-                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_COLORS[idx], display: 'inline-block' }} />
-                            {d.name}
-                          </span>
-                        ))}
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+                        {pieData.map((d, idx) => {
+                          const total = pieData.reduce((s, p) => s + p.value, 0);
+                          const pct = total > 0 ? ((d.value / total) * 100).toFixed(0) : '0';
+                          return (
+                            <span key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 9, color: 'var(--text3)' }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: PIE_COLORS[idx], display: 'inline-block' }} />
+                              {d.name} {pct}%
+                            </span>
+                          );
+                        })}
                       </div>
                     </>
                   ) : (
-                    <div style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 11, padding: '30px 0' }}>
+                    <div style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 11, padding: '24px 0' }}>
                       이번달 데이터 없음
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 월별 순이익 표 — 이너피움만 */}
-              {tab === 'innerpium' && <div className="card">
+              {/* 회원가입/찜/카카오/인스타 막대그래프 */}
+              <div className="card">
                 <div className="card-head">
-                  <div className="card-title">▤ 월별 순이익</div>
+                  <div className="card-title">▦ 월별 유입 지표</div>
+                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>회원가입 · 찜 · 카카오 · 인스타</span>
                 </div>
-                <div className="card-body" style={{ padding: 0 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
-                    <thead>
-                      <tr>
-                        {['월', '순이익'].map(h => (
-                          <th key={h} style={{
-                            padding: '6px 10px', textAlign: h === '월' ? 'left' : 'right',
-                            background: 'var(--surface2)', borderBottom: '1px solid var(--border)',
-                            color: 'var(--text2)', fontWeight: 600, fontSize: 9,
-                          }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {monthlySummary.slice(0, 6).map((s, i) => (
-                        <tr key={s.month} style={{
-                          background: i % 2 === 0 ? 'var(--surface)' : 'var(--surface2)',
-                          borderTop: '1px solid var(--border)',
-                        }}>
-                          <td style={{ padding: '5px 10px', color: 'var(--text2)', fontWeight: 600 }}>{s.month.slice(5)}월</td>
-                          <td style={{
-                            padding: '5px 10px', textAlign: 'right', fontWeight: 700,
-                            fontFamily: "'DM Mono',monospace",
-                            color: s.net_profit >= 0 ? '#10b981' : '#f43f5e',
-                          }}>
-                            {s.net_profit.toLocaleString('ko-KR')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="card-body" style={{ padding: '8px 10px' }}>
+                  <ResponsiveContainer width="100%" height={140}>
+                    <ComposedChart data={engagementChartData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
+                      <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
+                      <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        formatter={(v: any, name: any) => [Number(v??0).toLocaleString('ko-KR'), name]} />
+                      <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
+                      <Bar dataKey="회원가입" stackId="e" fill="#6366f1" />
+                      <Bar dataKey="찜"      stackId="e" fill="#ec4899" />
+                      <Bar dataKey="카카오"  stackId="e" fill="#f59e0b" />
+                      <Bar dataKey="인스타"  stackId="e" fill="#8b5cf6" radius={[2,2,0,0]} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
                 </div>
-              </div>}
+              </div>
             </div>
 
             {/* 일별 데이터 테이블 */}
