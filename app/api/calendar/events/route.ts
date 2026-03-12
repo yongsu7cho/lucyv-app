@@ -29,18 +29,76 @@ async function fetchEvents(
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<string | null> {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '',
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-  const data = await res.json();
-  return data.access_token ?? null;
+  try {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    const data = await res.json();
+    return data.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Returns items on success, null on 401 (retry with refresh), [] on any other error
+async function tryFetch(
+  token: string,
+  timeMin: string,
+  timeMax: string
+): Promise<{ items: unknown[] } | null> {
+  let calRes: Response;
+  try {
+    calRes = await fetchCalendars(token);
+  } catch {
+    return { items: [] };
+  }
+
+  if (calRes.status === 401) return null;
+
+  if (!calRes.ok) {
+    // scope error, API disabled, quota exceeded, etc. → return empty instead of 502
+    return { items: [] };
+  }
+
+  let calData: { items?: { id: string; summary: string; backgroundColor?: string; primary?: boolean }[] };
+  try {
+    calData = await calRes.json();
+  } catch {
+    return { items: [] };
+  }
+
+  const calendars = calData.items ?? [];
+  if (calendars.length === 0) return { items: [] };
+
+  const allItems: unknown[] = [];
+  for (const cal of calendars) {
+    try {
+      const evRes = await fetchEvents(token, cal.id, timeMin, timeMax);
+      if (evRes.status === 401) return null;
+      if (!evRes.ok) continue;
+      const evData = await evRes.json();
+      const items = (evData.items ?? []).map((ev: Record<string, unknown>) => ({
+        ...ev,
+        calendarId: cal.id,
+        calendarColor: cal.backgroundColor,
+        calendarSummary: cal.summary,
+        isPrimary: cal.primary ?? false,
+      }));
+      allItems.push(...items);
+    } catch {
+      // skip this calendar on network error, continue with others
+      continue;
+    }
+  }
+
+  return { items: allItems };
 }
 
 export async function GET(request: NextRequest) {
@@ -59,69 +117,25 @@ export async function GET(request: NextRequest) {
     searchParams.get('timeMax') ??
     new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59).toISOString();
 
-  // Helper: try fetching events, return null on 401 (for token refresh), throw on other errors
-  const tryFetch = async (
-    token: string
-  ): Promise<{ items: unknown[] } | null> => {
-    const calRes = await fetchCalendars(token);
-    if (calRes.status === 401) return null;
-
-    const calData = await calRes.json();
-
-    // Calendar API disabled or other API-level error
-    if (!calRes.ok) {
-      const msg = calData?.error?.message ?? `Calendar API error ${calRes.status}`;
-      throw new Error(msg);
-    }
-
-    const calendars: { id: string; summary: string; backgroundColor?: string; primary?: boolean }[] =
-      calData.items ?? [];
-
-    if (calendars.length === 0) {
-      return { items: [] };
-    }
-
-    // Fetch events from all calendars
-    const allItems: unknown[] = [];
-    for (const cal of calendars) {
-      const evRes = await fetchEvents(token, cal.id, timeMin, timeMax);
-      if (evRes.status === 401) return null;
-      if (!evRes.ok) continue;
-      const evData = await evRes.json();
-      const items = (evData.items ?? []).map((ev: Record<string, unknown>) => ({
-        ...ev,
-        calendarId: cal.id,
-        calendarColor: cal.backgroundColor,
-        calendarSummary: cal.summary,
-        isPrimary: cal.primary ?? false,
-      }));
-      allItems.push(...items);
-    }
-
-    return { items: allItems };
-  };
-
-  // First attempt
   let result: { items: unknown[] } | null = null;
   let newAccessToken: string | null = null;
 
-  try {
-    result = accessToken ? await tryFetch(accessToken) : null;
-
-    // Token expired (401) — try refreshing
-    if (!result && refreshToken) {
-      newAccessToken = await refreshAccessToken(refreshToken);
-      if (newAccessToken) {
-        result = await tryFetch(newAccessToken);
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'unknown error';
-    return NextResponse.json({ error: 'calendar_api_error', message }, { status: 502 });
+  // First attempt
+  if (accessToken) {
+    result = await tryFetch(accessToken, timeMin, timeMax);
   }
 
+  // Token expired (401) — try refreshing
+  if (!result && refreshToken) {
+    newAccessToken = await refreshAccessToken(refreshToken);
+    if (newAccessToken) {
+      result = await tryFetch(newAccessToken, timeMin, timeMax);
+    }
+  }
+
+  // If still null (refresh failed or no tokens), return empty
   if (!result) {
-    return NextResponse.json({ error: 'token_expired' }, { status: 401 });
+    return NextResponse.json({ error: 'token_expired', items: [] }, { status: 401 });
   }
 
   const response = NextResponse.json(result);
