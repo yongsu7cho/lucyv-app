@@ -52,30 +52,30 @@ async function tryFetch(
   token: string,
   timeMin: string,
   timeMax: string
-): Promise<{ items: unknown[]; debug: { calendarCount: number; calendarIds: string[]; totalEvents: number } } | null> {
+): Promise<{ items: unknown[] } | null> {
   let calRes: Response;
   try {
     calRes = await fetchCalendars(token);
   } catch {
-    return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
+    return { items: [] };
   }
 
   if (calRes.status === 401) return null;
 
   if (!calRes.ok) {
     // scope error, API disabled, quota exceeded, etc. → return empty instead of 502
-    return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
+    return { items: [] };
   }
 
   let calData: { items?: { id: string; summary: string; backgroundColor?: string; primary?: boolean }[] };
   try {
     calData = await calRes.json();
   } catch {
-    return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
+    return { items: [] };
   }
 
   const calendars = calData.items ?? [];
-  if (calendars.length === 0) return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
+  if (calendars.length === 0) return { items: [] };
 
   const allItems: unknown[] = [];
   for (const cal of calendars) {
@@ -98,14 +98,11 @@ async function tryFetch(
     }
   }
 
-  return {
-    items: allItems,
-    debug: {
-      calendarCount: calendars.length,
-      calendarIds: calendars.map(c => c.id),
-      totalEvents: allItems.length,
-    },
-  };
+  console.log('캘린더 수:', calendars.length);
+  console.log('캘린더 목록:', calendars.map(c => c.id));
+  console.log('전체 이벤트 수:', allItems.length);
+
+  return { items: allItems };
 }
 
 export async function GET(request: NextRequest) {
@@ -145,7 +142,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'token_expired', items: [] }, { status: 401 });
   }
 
-  const response = NextResponse.json({ items: result.items, debug: result.debug });
+  const response = NextResponse.json(result);
 
   // Persist refreshed access token
   if (newAccessToken) {
