@@ -52,7 +52,7 @@ async function tryFetch(
   token: string,
   timeMin: string,
   timeMax: string
-): Promise<{ items: unknown[] } | null> {
+): Promise<{ items: unknown[]; debug: { calendarCount: number; calendarIds: string[]; totalEvents: number } } | null> {
   let calRes: Response;
   try {
     calRes = await fetchCalendars(token);
@@ -64,18 +64,18 @@ async function tryFetch(
 
   if (!calRes.ok) {
     // scope error, API disabled, quota exceeded, etc. → return empty instead of 502
-    return { items: [] };
+    return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
   }
 
   let calData: { items?: { id: string; summary: string; backgroundColor?: string; primary?: boolean }[] };
   try {
     calData = await calRes.json();
   } catch {
-    return { items: [] };
+    return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
   }
 
   const calendars = calData.items ?? [];
-  if (calendars.length === 0) return { items: [] };
+  if (calendars.length === 0) return { items: [], debug: { calendarCount: 0, calendarIds: [], totalEvents: 0 } };
 
   const allItems: unknown[] = [];
   for (const cal of calendars) {
@@ -98,7 +98,14 @@ async function tryFetch(
     }
   }
 
-  return { items: allItems };
+  return {
+    items: allItems,
+    debug: {
+      calendarCount: calendars.length,
+      calendarIds: calendars.map(c => c.id),
+      totalEvents: allItems.length,
+    },
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -138,7 +145,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'token_expired', items: [] }, { status: 401 });
   }
 
-  const response = NextResponse.json(result);
+  const response = NextResponse.json({ items: result.items, debug: result.debug });
 
   // Persist refreshed access token
   if (newAccessToken) {
