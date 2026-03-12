@@ -257,9 +257,6 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
               <span className={`status-pill ${PROJ_STAT[selectedProject.status].cls}`}>
                 {PROJ_STAT[selectedProject.status].lbl}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
-                {selectedProject.progress}% 완료
-              </span>
             </div>
 
             {selectedProject.due && (
@@ -267,10 +264,6 @@ export default function ProjectsPage({ projects, setProjects }: ProjectsPageProp
                 📅 {selectedProject.start} ~ {selectedProject.due}
               </div>
             )}
-
-            <div style={{ width: '100%', height: 4, background: 'var(--surface3)', borderRadius: 4, marginBottom: 20 }}>
-              <div style={{ height: '100%', borderRadius: 4, background: PROJ_COLOR[selectedProject.status], width: `${selectedProject.progress}%` }} />
-            </div>
 
             {/* Status */}
             <div style={{ marginBottom: 20 }}>
