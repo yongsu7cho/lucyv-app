@@ -261,6 +261,10 @@ export default function SalesPage() {
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedDay,   setSelectedDay]   = useState('');
 
+  const [dateMode,   setDateMode]   = useState<'month' | 'range'>('month');
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd,   setRangeEnd]   = useState('');
+
   const [memo, setMemo] = useState('');
   useEffect(() => { setMemo(localStorage.getItem(`memo-${tab}`) || ''); }, [tab]);
 
@@ -333,11 +337,15 @@ export default function SalesPage() {
   }
 
   // 선택한 월 행 (테이블·차트·KPI 좌)
-  const filteredRows = selectedMonthPrefix
-    ? rows.filter(r => r.date.startsWith(selectedMonthPrefix))
-    : rows.slice(0, 30);
+  const filteredRows = dateMode === 'range'
+    ? rows.filter(r => (!rangeStart || r.date >= rangeStart) && (!rangeEnd || r.date <= rangeEnd))
+    : selectedMonthPrefix
+      ? rows.filter(r => r.date.startsWith(selectedMonthPrefix))
+      : rows.slice(0, 30);
   const displayRows  = filteredRows;
-  const downloadRows = selectedMonthPrefix ? rows.filter(r => r.date.startsWith(selectedMonthPrefix)) : rows;
+  const downloadRows = dateMode === 'range'
+    ? rows.filter(r => (!rangeStart || r.date >= rangeStart) && (!rangeEnd || r.date <= rangeEnd))
+    : selectedMonthPrefix ? rows.filter(r => r.date.startsWith(selectedMonthPrefix)) : rows;
 
   // KPI — 선택한 월
   const monthRows    = selectedMonthPrefix ? rows.filter(r => r.date.startsWith(selectedMonthPrefix)) : [];
@@ -551,21 +559,53 @@ export default function SalesPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <select className="input" style={{ width: 88, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={selectedYear} onChange={e => handleYearChange(e.target.value)}>
-            <option value="">연도</option>
-            {availableYears.map(y => <option key={y} value={y}>{y}년</option>)}
-          </select>
-          <select className="input" style={{ width: 72, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={selectedMonth} onChange={e => handleMonthChange(e.target.value)} disabled={!selectedYear}>
-            <option value="">월</option>
-            {availableMonths.map(m => <option key={m} value={m}>{Number(m)}월</option>)}
-          </select>
-          <select className="input" style={{ width: 66, fontSize: 12, padding: '4px 8px', height: 32 }}
-            value={selectedDay} onChange={e => setSelectedDay(e.target.value)} disabled={!selectedMonth}>
-            <option value="">일</option>
-            {availableDays.map(d => <option key={d} value={d}>{Number(d)}일</option>)}
-          </select>
+          {/* 월선택 / 기간선택 토글 */}
+          <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
+            {(['month', 'range'] as const).map(mode => (
+              <button key={mode}
+                onClick={() => setDateMode(mode)}
+                style={{
+                  padding: '4px 10px', fontSize: 11, border: 'none', cursor: 'pointer',
+                  background: dateMode === mode ? 'var(--rose)' : 'var(--surface2)',
+                  color: dateMode === mode ? '#fff' : 'var(--text2)', fontWeight: 600,
+                }}>
+                {mode === 'month' ? '월 선택' : '기간 선택'}
+              </button>
+            ))}
+          </div>
+
+          {dateMode === 'month' ? (
+            <>
+              <select className="input" style={{ width: 88, fontSize: 12, padding: '4px 8px', height: 32 }}
+                value={selectedYear} onChange={e => handleYearChange(e.target.value)}>
+                <option value="">연도</option>
+                {availableYears.map(y => <option key={y} value={y}>{y}년</option>)}
+              </select>
+              <select className="input" style={{ width: 72, fontSize: 12, padding: '4px 8px', height: 32 }}
+                value={selectedMonth} onChange={e => handleMonthChange(e.target.value)} disabled={!selectedYear}>
+                <option value="">월</option>
+                {availableMonths.map(m => <option key={m} value={m}>{Number(m)}월</option>)}
+              </select>
+              <select className="input" style={{ width: 66, fontSize: 12, padding: '4px 8px', height: 32 }}
+                value={selectedDay} onChange={e => setSelectedDay(e.target.value)} disabled={!selectedMonth}>
+                <option value="">일</option>
+                {availableDays.map(d => <option key={d} value={d}>{Number(d)}일</option>)}
+              </select>
+            </>
+          ) : (
+            <>
+              <input type="date" className="input" style={{ width: 140, fontSize: 12, padding: '4px 8px', height: 32 }}
+                value={rangeStart} onChange={e => setRangeStart(e.target.value)} />
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>~</span>
+              <input type="date" className="input" style={{ width: 140, fontSize: 12, padding: '4px 8px', height: 32 }}
+                value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} />
+              {(rangeStart || rangeEnd) && (
+                <button className="btn btn-ghost btn-sm"
+                  style={{ fontSize: 11, padding: '4px 8px', height: 32 }}
+                  onClick={() => { setRangeStart(''); setRangeEnd(''); }}>✕</button>
+              )}
+            </>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 6 }}>
@@ -971,6 +1011,37 @@ export default function SalesPage() {
                         );
                       })}
                     </tbody>
+                    {displayRows.length > 1 && (
+                      <tfoot>
+                        <tr style={{ background: 'rgba(251,191,36,0.10)', borderTop: '2px solid var(--border)' }}>
+                          {cols.map(c => {
+                            if (c.field === 'date') {
+                              return (
+                                <td key="avg-date" style={{ padding: '6px 10px', fontWeight: 700, fontSize: 10, color: 'var(--text2)' }}>
+                                  평균
+                                </td>
+                              );
+                            }
+                            const nums = displayRows.map(r => Number(r[c.field])).filter(n => isFinite(n) && !isNaN(n) && n !== 0);
+                            if (nums.length === 0) return <td key={String(c.field)} style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text3)' }}>-</td>;
+                            const avg = nums.reduce((s, n) => s + n, 0) / nums.length;
+                            const formatted = c.field === 'conversion_rate'
+                              ? `${avg.toFixed(2)}%`
+                              : Math.round(avg).toLocaleString('ko-KR');
+                            return (
+                              <td key={String(c.field)} style={{
+                                padding: '6px 10px', textAlign: 'right', fontWeight: 600,
+                                fontSize: 10, fontFamily: "'DM Mono', monospace",
+                                color: c.auto ? 'var(--text3)' : 'var(--text2)',
+                              }}>
+                                {formatted}
+                              </td>
+                            );
+                          })}
+                          <td style={{ padding: '6px 10px' }} />
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
