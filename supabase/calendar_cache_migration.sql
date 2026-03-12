@@ -1,11 +1,13 @@
 -- ──────────────────────────────────────────────────────────────
--- calendar_cache: Google Calendar 이벤트 월별 캐시
---   id         : 캐시 키 (예: "calendar-2026-03", UUID for dashboard today-cache)
---   events     : 이벤트 배열 (jsonb)
---   cached_at  : 마지막 저장 시각
+-- calendar_cache: Google Calendar 이벤트 캐시
+--   id        : UUID PK (자동 생성)
+--   key       : 문자열 식별자 (예: "calendar-2026-03", "today-events")
+--   events    : 이벤트 배열 (jsonb)
+--   cached_at : 마지막 저장 시각
 -- ──────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS calendar_cache (
-  id         TEXT        PRIMARY KEY,
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  key        TEXT        UNIQUE NOT NULL,
   events     JSONB       NOT NULL DEFAULT '[]'::jsonb,
   cached_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

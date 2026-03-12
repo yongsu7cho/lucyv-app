@@ -141,7 +141,7 @@ function GoogleCalendarTab() {
     const { data } = await supabase
       .from('calendar_cache')
       .select('events, cached_at')
-      .eq('id', cacheKey)
+      .eq('key', cacheKey)
       .maybeSingle();
     if (!data?.events) return false;
     setGcalMap(groupByDate((data.events as GCalEvent[]) ?? []));
@@ -179,11 +179,10 @@ function GoogleCalendarTab() {
       const items = (data.items ?? []) as GCalEvent[];
       setGcalMap(groupByDate(items));
       // 성공 시 월별 캐시 저장
-      supabase.from('calendar_cache').upsert({
-        id: cacheKey,
-        events: items,
-        cached_at: new Date().toISOString(),
-      });
+      supabase.from('calendar_cache').upsert(
+        { key: cacheKey, events: items, cached_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      );
     } catch {
       setEventsError('일정을 불러오는 데 실패했어요. 잠시 후 다시 시도해주세요.');
       await loadMonthCache(y, m, false);
