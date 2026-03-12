@@ -171,17 +171,35 @@ function eventTimeStr(ev: GCalEventItem): string {
   return m === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}시 ${m}분`;
 }
 
+const CACHE_ID = '00000000-0000-0000-0000-000000000001';
+
 function TodayEventsCard() {
-  const [events,  setEvents]  = useState<GCalEventItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [events,       setEvents]       = useState<GCalEventItem[]>([]);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
   const [gcalConnected, setGcalConnected] = useState<boolean | null>(null);
+  const [usingCache,   setUsingCache]   = useState(false);
+  const [cacheDate,    setCacheDate]    = useState<string | null>(null);
+
+  async function loadFromCache(): Promise<boolean> {
+    const { data } = await supabase
+      .from('calendar_cache')
+      .select('events, cached_at')
+      .eq('id', CACHE_ID)
+      .maybeSingle();
+    if (!data) return false;
+    const items = data.events as GCalEventItem[];
+    setEvents(items);
+    setUsingCache(true);
+    setCacheDate(data.cached_at);
+    return true;
+  }
 
   const load = async () => {
     setLoading(true);
     setError(null);
+    setUsingCache(false);
     try {
-      // Check auth status first
       const statusRes = await fetch('/api/auth/status');
       const status = await statusRes.json();
       if (!status.connected) {
@@ -191,17 +209,18 @@ function TodayEventsCard() {
       }
       setGcalConnected(true);
 
-      const today = dk(new Date());
-      const timeMin = `${today}T00:00:00.000Z`;
-      const timeMax = `${today}T23:59:59.999Z`;
-      // Use local timezone bounds
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const endOfDay   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
 
       const res = await fetch(`/api/calendar/events?timeMin=${encodeURIComponent(startOfDay)}&timeMax=${encodeURIComponent(endOfDay)}`);
       if (res.status === 401) { setGcalConnected(false); setLoading(false); return; }
-      if (!res.ok) { setError('일정을 불러오지 못했어요.'); setLoading(false); return; }
+      if (!res.ok) {
+        const cached = await loadFromCache();
+        if (!cached) setError('일정을 불러오지 못했어요.');
+        setLoading(false);
+        return;
+      }
 
       const data = await res.json();
       const todayStr = dk(new Date());
@@ -213,8 +232,16 @@ function TodayEventsCard() {
         (a.start.dateTime ?? a.start.date ?? '').localeCompare(b.start.dateTime ?? b.start.date ?? '')
       );
       setEvents(items);
+
+      // 성공 시 캐시 저장
+      supabase.from('calendar_cache').upsert({
+        id: CACHE_ID,
+        events: items,
+        cached_at: new Date().toISOString(),
+      });
     } catch {
-      setError('네트워크 오류가 발생했어요.');
+      const cached = await loadFromCache();
+      if (!cached) setError('네트워크 오류가 발생했어요.');
     } finally {
       setLoading(false);
     }
@@ -222,18 +249,29 @@ function TodayEventsCard() {
 
   useEffect(() => { load(); }, []);
 
+  const cacheDateLabel = cacheDate
+    ? new Date(cacheDate).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
     <div className="card">
       <div className="card-head" style={{ justifyContent: 'space-between' }}>
         <div className="card-title">◷ 오늘 일정</div>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={load}
-          disabled={loading}
-          style={{ fontSize: 11, padding: '2px 8px' }}
-        >
-          {loading ? '...' : '↻'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {usingCache && cacheDateLabel && (
+            <span style={{ fontSize: 10, color: 'var(--text3)', fontFamily: "'DM Mono', monospace" }}>
+              마지막 업데이트: {cacheDateLabel}
+            </span>
+          )}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={load}
+            disabled={loading}
+            style={{ fontSize: 11, padding: '2px 8px' }}
+          >
+            {loading ? '...' : '↻'}
+          </button>
+        </div>
       </div>
       <div className="card-body">
         {gcalConnected === false ? (
