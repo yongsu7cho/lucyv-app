@@ -132,6 +132,9 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     type === 'project' ? (draft as Project).name :
     (draft as TeamMember).name;
 
+  const projectStatusLabel: Record<string, string> = { active: '진행 중', hold: '보류', done: '완료' };
+  const projectStatusColor: Record<string, string> = { active: 'var(--rose)', hold: '#f59e0b', done: 'var(--text3)' };
+
   const [infoOpen, setInfoOpen] = useState(true);
 
   const saveStatusEl = type === 'team' && saveStatus !== 'idle' ? (
@@ -151,8 +154,18 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
         <div className="dp-head">
           <div className="dp-head-info">
             <div className="dp-head-title">{panelTitle || '상세 정보'}</div>
-            <div className="dp-head-sub">
-              {type === 'influencer' ? '인플루언서' : type === 'project' ? '프로젝트' : '팀원'}
+            <div className="dp-head-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span>{type === 'influencer' ? '인플루언서' : type === 'project' ? '프로젝트' : '팀원'}</span>
+              {type === 'project' && (draft as Project).brand && (
+                <span style={{ fontSize: 10, fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', color: 'var(--text2)' }}>
+                  {(draft as Project).brand}
+                </span>
+              )}
+              {type === 'project' && (
+                <span style={{ fontSize: 10, fontWeight: 600, background: projectStatusColor[(draft as Project).status] + '22', border: `1px solid ${projectStatusColor[(draft as Project).status]}55`, borderRadius: 4, padding: '1px 6px', color: projectStatusColor[(draft as Project).status] }}>
+                  {projectStatusLabel[(draft as Project).status] ?? (draft as Project).status}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -547,26 +560,13 @@ function ProjectFields({ p, upd }: { p: Project; upd: (f: string, v: unknown) =>
           <input className="input" type="date" value={p.due} onChange={e => upd('due', e.target.value)} />
         </Fld>
       </div>
-      <div style={G2}>
-        <Fld label="상태">
-          <select className="input" value={p.status} onChange={e => upd('status', e.target.value as ProjectStatus)}>
-            <option value="active">진행 중</option>
-            <option value="hold">보류</option>
-            <option value="done">완료</option>
-          </select>
-        </Fld>
-        <Fld label="진행률 (%)">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 4 }}>
-            <input
-              type="range" min={0} max={100} value={p.progress}
-              style={{ flex: 1, accentColor: 'var(--rose)' }}
-              onChange={e => upd('progress', parseInt(e.target.value))}
-            />
-            <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: 'var(--text2)', minWidth: 30 }}>
-              {p.progress}%
-            </span>
-          </div>
-        </Fld>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="dp-field-label" style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>상태</div>
+        <select className="input" style={{ flex: 1 }} value={p.status} onChange={e => upd('status', e.target.value as ProjectStatus)}>
+          <option value="active">진행 중</option>
+          <option value="hold">보류</option>
+          <option value="done">완료</option>
+        </select>
       </div>
       <Fld label="설명">
         <textarea className="input" value={p.desc} placeholder="설명" style={{ minHeight: 60, resize: 'vertical' }} onChange={e => upd('desc', e.target.value)} />
