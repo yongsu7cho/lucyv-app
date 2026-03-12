@@ -4,7 +4,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   const error = searchParams.get('error');
-  const origin = new URL(request.url).origin;
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
 
   if (error || !code) {
     return NextResponse.redirect(`${origin}/?error=auth_failed`);
