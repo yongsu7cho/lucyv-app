@@ -897,8 +897,8 @@ textarea.input { resize: vertical; min-height: 80px; line-height: 1.6; }
   top: 0;
   right: 0;
   height: 100vh;
-  width: 55vw;
-  min-width: 380px;
+  width: 65vw;
+  min-width: 420px;
   background: var(--bg);
   border-left: 1px solid var(--border);
   box-shadow: -6px 0 32px rgba(0,0,0,0.1);
