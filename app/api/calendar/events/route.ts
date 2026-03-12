@@ -98,6 +98,10 @@ async function tryFetch(
     }
   }
 
+  console.log('캘린더 수:', calendars.length);
+  console.log('캘린더 목록:', calendars.map(c => c.id));
+  console.log('전체 이벤트 수:', allItems.length);
+
   return { items: allItems };
 }
 
