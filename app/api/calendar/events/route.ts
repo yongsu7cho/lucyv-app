@@ -63,19 +63,23 @@ export async function GET(request: NextRequest) {
   const tryFetch = async (
     token: string
   ): Promise<{ items: unknown[] } | null> => {
+    // Attempt to get full calendar list; fall back to primary on 403 (scope/API issues)
     const calRes = await fetchCalendars(token);
     if (calRes.status === 401) return null;
 
-    const calData = await calRes.json();
+    let calendars: { id: string; summary: string; backgroundColor?: string; primary?: boolean }[] = [];
 
-    // Calendar API disabled or other API-level error
-    if (!calRes.ok) {
+    if (calRes.ok) {
+      const calData = await calRes.json();
+      calendars = calData.items ?? [];
+    } else if (calRes.status === 403) {
+      // Insufficient scope or calendarList not permitted — fall back to primary calendar
+      calendars = [{ id: 'primary', summary: 'My Calendar', primary: true }];
+    } else {
+      const calData = await calRes.json();
       const msg = calData?.error?.message ?? `Calendar API error ${calRes.status}`;
       throw new Error(msg);
     }
-
-    const calendars: { id: string; summary: string; backgroundColor?: string; primary?: boolean }[] =
-      calData.items ?? [];
 
     if (calendars.length === 0) {
       return { items: [] };
