@@ -132,6 +132,8 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     type === 'project' ? (draft as Project).name :
     (draft as TeamMember).name;
 
+  const [infoOpen, setInfoOpen] = useState(true);
+
   const saveStatusEl = type === 'team' && saveStatus !== 'idle' ? (
     <span style={{
       fontSize: 11, fontFamily: "'DM Mono',monospace",
@@ -215,9 +217,17 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
           ) : (
             <>
               <div className="dp-section">
-                <div className="dp-section-label">기본 정보</div>
-                {type === 'influencer' && <InfluencerFields inf={draft as Influencer} upd={upd} />}
-                {type === 'project' && <ProjectFields p={draft as Project} upd={upd} />}
+                <div className="dp-section-label" style={{ cursor: 'pointer' }} onClick={() => setInfoOpen(o => !o)}>
+                  <span style={{ marginRight: 4, fontSize: 8, display: 'inline-block', transition: 'transform 0.15s', transform: infoOpen ? 'rotate(90deg)' : 'none' }}>▶</span>
+                  기본 정보
+                  <button
+                    className="dp-add-action-btn dp-add-action-inline"
+                    style={{ fontSize: 10, color: 'var(--text3)' }}
+                    onClick={e => { e.stopPropagation(); setInfoOpen(o => !o); }}
+                  >{infoOpen ? '접기' : '펼치기'}</button>
+                </div>
+                {infoOpen && type === 'influencer' && <InfluencerFields inf={draft as Influencer} upd={upd} />}
+                {infoOpen && type === 'project' && <ProjectFields p={draft as Project} upd={upd} />}
               </div>
 
               <div className="dp-section">
@@ -497,36 +507,39 @@ function InfluencerFields({ inf, upd }: { inf: Influencer; upd: (f: string, v: u
           <input className="input" type="date" value={inf.end} onChange={e => upd('end', e.target.value)} />
         </Fld>
       </div>
-      <Fld label="상태">
-        <select className="input" value={inf.status} onChange={e => upd('status', e.target.value as InfluencerStatus)}>
-          <option value="active">공구 진행 중</option>
-          <option value="standby">대기 중</option>
-          <option value="end">종료</option>
-        </select>
-      </Fld>
+      <div style={G2}>
+        <Fld label="상태">
+          <select className="input" value={inf.status} onChange={e => upd('status', e.target.value as InfluencerStatus)}>
+            <option value="active">공구 진행 중</option>
+            <option value="standby">대기 중</option>
+            <option value="end">종료</option>
+          </select>
+        </Fld>
+        <div />
+      </div>
     </>
   );
 }
 
 function ProjectFields({ p, upd }: { p: Project; upd: (f: string, v: unknown) => void }) {
+  const G2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 } as const;
   return (
     <>
-      <Fld label="프로젝트명">
-        <input className="input" value={p.name} onChange={e => upd('name', e.target.value)} />
-      </Fld>
-      <Fld label="브랜드">
-        <select className="input" value={p.brand} onChange={e => upd('brand', e.target.value as Brand)}>
-          <option value="이너피움">이너피움</option>
-          <option value="아쿠아크">아쿠아크</option>
-          <option value="문화콘텐츠">문화콘텐츠</option>
-          <option value="에이전시">에이전시</option>
-          <option value="기타">기타</option>
-        </select>
-      </Fld>
-      <Fld label="설명">
-        <textarea className="input" value={p.desc} placeholder="설명" style={{ minHeight: 72, resize: 'vertical' }} onChange={e => upd('desc', e.target.value)} />
-      </Fld>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={G2}>
+        <Fld label="프로젝트명">
+          <input className="input" value={p.name} onChange={e => upd('name', e.target.value)} />
+        </Fld>
+        <Fld label="브랜드">
+          <select className="input" value={p.brand} onChange={e => upd('brand', e.target.value as Brand)}>
+            <option value="이너피움">이너피움</option>
+            <option value="아쿠아크">아쿠아크</option>
+            <option value="문화콘텐츠">문화콘텐츠</option>
+            <option value="에이전시">에이전시</option>
+            <option value="기타">기타</option>
+          </select>
+        </Fld>
+      </div>
+      <div style={G2}>
         <Fld label="시작일">
           <input className="input" type="date" value={p.start} onChange={e => upd('start', e.target.value)} />
         </Fld>
@@ -534,24 +547,29 @@ function ProjectFields({ p, upd }: { p: Project; upd: (f: string, v: unknown) =>
           <input className="input" type="date" value={p.due} onChange={e => upd('due', e.target.value)} />
         </Fld>
       </div>
-      <Fld label="진행률 (%)">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            type="range" min={0} max={100} value={p.progress}
-            style={{ flex: 1, accentColor: 'var(--rose)' }}
-            onChange={e => upd('progress', parseInt(e.target.value))}
-          />
-          <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: 'var(--text2)', minWidth: 36 }}>
-            {p.progress}%
-          </span>
-        </div>
-      </Fld>
-      <Fld label="상태">
-        <select className="input" value={p.status} onChange={e => upd('status', e.target.value as ProjectStatus)}>
-          <option value="active">진행 중</option>
-          <option value="hold">보류</option>
-          <option value="done">완료</option>
-        </select>
+      <div style={G2}>
+        <Fld label="상태">
+          <select className="input" value={p.status} onChange={e => upd('status', e.target.value as ProjectStatus)}>
+            <option value="active">진행 중</option>
+            <option value="hold">보류</option>
+            <option value="done">완료</option>
+          </select>
+        </Fld>
+        <Fld label="진행률 (%)">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 4 }}>
+            <input
+              type="range" min={0} max={100} value={p.progress}
+              style={{ flex: 1, accentColor: 'var(--rose)' }}
+              onChange={e => upd('progress', parseInt(e.target.value))}
+            />
+            <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: 'var(--text2)', minWidth: 30 }}>
+              {p.progress}%
+            </span>
+          </div>
+        </Fld>
+      </div>
+      <Fld label="설명">
+        <textarea className="input" value={p.desc} placeholder="설명" style={{ minHeight: 60, resize: 'vertical' }} onChange={e => upd('desc', e.target.value)} />
       </Fld>
     </>
   );
