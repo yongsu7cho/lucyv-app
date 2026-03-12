@@ -3,9 +3,9 @@ import { useState, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import XLSXStyle from 'xlsx-js-style';
 
-type Platform = '카페24' | '스마트스토어' | '쿠팡' | '신세계V' | '무신사' | 'W컨셉';
+type Platform = '카페24' | '스마트스토어' | '쿠팡' | '신세계V' | '무신사' | 'W컨셉' | '블로그페이';
 
-const PLATFORMS: Platform[] = ['카페24', '스마트스토어', '쿠팡', '신세계V', '무신사', 'W컨셉'];
+const PLATFORMS: Platform[] = ['카페24', '스마트스토어', '쿠팡', '신세계V', '무신사', 'W컨셉', '블로그페이'];
 
 const FIXED = {
   보내시는분: '㈜루씨베이전씨',
@@ -52,6 +52,20 @@ function extractBracketTag(s: string): string {
   if (!m) return '';
   const content = m[1].trim();
   return /^\d+$/.test(content) ? '' : content;
+}
+
+/** 블로그페이 상품정보(상세) 파싱
+ *  "현픽X잇츠크랜베리(24차) /  수량 : ★무배 잇츠크랜베리 5+1박스(52%) (1개)"
+ *  → "무배 잇츠크랜베리 5+1박스"
+ */
+function parseBlogpayProduct(s: string): string {
+  if (!s) return s;
+  const idx = s.indexOf('수량 :');
+  let name = idx !== -1 ? s.slice(idx + '수량 :'.length).trim() : s;
+  name = name.replace(/\([^)]*%[^)]*\)/g, '');  // (52%) 등 % 포함 괄호 제거
+  name = name.replace(/\(\d+개\)/g, '');          // (1개) 등 제거
+  name = name.replace(/★/g, '');                  // ★ 제거
+  return name.trim();
 }
 
 /** 옵션문자열 → [{name, qty}] 분리
@@ -180,6 +194,16 @@ function mapRows(platform: Platform, raw: RawRow): OrderRow[] {
     base.품목명 = g(raw, '옵션1') || g(raw, '상품명');
     base.고객주문번호 = g(raw, '주문번호');
     base.배송메모 = g(raw, '배송메모');
+  } else if (platform === '블로그페이') {
+    base.받는사람 = g(raw, '4');
+    base.받는사람전화번호 = g(raw, '5');
+    base.받는사람핸드폰 = g(raw, '6');
+    base.우편 = g(raw, '7');
+    base.받는사람주소 = g(raw, '8');
+    base.수량 = g(raw, '11');
+    base.고객주문번호 = g(raw, '0');
+    base.배송메모 = g(raw, '18');
+    base.품목명 = parseBlogpayProduct(g(raw, '9'));
   }
   return [base];
 }
@@ -189,6 +213,18 @@ function mapRows(platform: Platform, raw: RawRow): OrderRow[] {
 function parseNormal(wb: XLSX.WorkBook): RawRow[] {
   const ws = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json<RawRow>(ws, { defval: '' });
+}
+
+/** xlsx: 1행 헤더, 2행부터 데이터 → 인덱스 기반 키 */
+function parseIndexed(wb: XLSX.WorkBook): RawRow[] {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const all = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
+  if (all.length < 2) return [];
+  return all.slice(1).map(row => {
+    const obj: RawRow = {};
+    (row as unknown[]).forEach((v, i) => { obj[String(i)] = String(v ?? ''); });
+    return obj;
+  }).filter(obj => Object.values(obj).some(v => v !== ''));
 }
 
 function parseSkipFirstRow(wb: XLSX.WorkBook): RawRow[] {
@@ -249,6 +285,7 @@ const ACCEPTS: Record<Platform, string> = {
   '신세계V': '.xlsx,.xls',
   '무신사': '.xls',
   'W컨셉': '.xlsx,.xls',
+  '블로그페이': '.xlsx,.xls',
 };
 
 const FILE_HINT: Record<Platform, string> = {
@@ -258,6 +295,7 @@ const FILE_HINT: Record<Platform, string> = {
   '신세계V': 'XLSX · XLS',
   '무신사': 'XLS (HTML 형식)',
   'W컨셉': 'XLSX · XLS',
+  '블로그페이': 'XLSX · XLS (헤더 1행)',
 };
 
 const PREVIEW_COLS: typeof ORDER_COLUMNS[number][] = [
@@ -344,6 +382,10 @@ export default function OrderPage() {
         const buf = await readBuffer(file);
         const wb = XLSX.read(buf, { type: 'array' });
         rawRows = parseSkipFirstRow(wb);
+      } else if (platform === '블로그페이') {
+        const buf = await readBuffer(file);
+        const wb = XLSX.read(buf, { type: 'array' });
+        rawRows = parseIndexed(wb);
       } else {
         const buf = await readBuffer(file);
         const wb = XLSX.read(buf, { type: 'array' });
