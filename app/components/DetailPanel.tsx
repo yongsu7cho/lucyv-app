@@ -133,7 +133,7 @@ export default function DetailPanel({ type, item, onSave, onClose }: Props) {
     (draft as TeamMember).name;
 
   const projectStatusLabel: Record<string, string> = { active: '진행 중', hold: '보류', done: '완료' };
-  const projectStatusColor: Record<string, string> = { active: 'var(--rose)', hold: '#f59e0b', done: 'var(--text3)' };
+  const projectStatusColor: Record<string, string> = { active: '#f43f5e', hold: '#f59e0b', done: '#94a3b8' };
 
   const [infoOpen, setInfoOpen] = useState(true);
 
