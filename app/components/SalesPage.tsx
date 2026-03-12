@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 import {
   ResponsiveContainer, ComposedChart, Bar, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  PieChart, Pie, Cell, LineChart,
+  PieChart, Pie, Cell, LineChart, LabelList,
 } from 'recharts';
 import { supabase } from '../../lib/supabase';
 
@@ -375,10 +375,11 @@ export default function SalesPage() {
 
   // 유입수 + 유입비용 차트 (월별)
   const inflowChartData = [...monthlySummary].reverse().map(s => ({
-    month:      s.month.slice(5) + '월',
-    '카페24유입': s.inflow_24,
-    '네이버유입':  s.inflow_n,
-    '유입비용':   s.inflow_cost,
+    month:          s.month.slice(5) + '월',
+    '카페24유입':   s.inflow_24,
+    '네이버유입':   s.inflow_n,
+    '유입비용':     s.inflow_cost,
+    'inflow_total': s.inflow_24 + s.inflow_n,
   }));
 
   // 전환률 차트 (월별)
@@ -389,11 +390,12 @@ export default function SalesPage() {
 
   // 회원가입/찜/카카오/인스타 차트 (월별)
   const engagementChartData = [...monthlySummary].reverse().map(s => ({
-    month:    s.month.slice(5) + '월',
-    '회원가입': s.signup,
-    '찜':      s.wishlist,
-    '카카오':  s.kakao,
-    '인스타':  s.insta,
+    month:      s.month.slice(5) + '월',
+    '회원가입':  s.signup,
+    '찜':        s.wishlist,
+    '카카오':    s.kakao,
+    '인스타':    s.insta,
+    'eng_total': s.signup + s.wishlist + s.kakao + s.insta,
   }));
   const pieData = [
     { name: '스토어팜', value: kpiStorefarm || 0 },
@@ -803,8 +805,8 @@ export default function SalesPage() {
                   <span style={{ fontSize: 10, color: 'var(--text3)' }}>스택바: 카페24·네이버 유입 / 라인: 유입비용(원)</span>
                 </div>
                 <div className="card-body" style={{ padding: '8px 10px' }}>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <ComposedChart data={inflowChartData} margin={{ top: 4, right: 48, bottom: 0, left: 8 }}>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <ComposedChart data={inflowChartData} margin={{ top: 20, right: 48, bottom: 0, left: 8 }}>
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
                       <YAxis yAxisId="bar" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
@@ -813,12 +815,17 @@ export default function SalesPage() {
                         tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)} />
                       <Tooltip contentStyle={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 10 }}
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         formatter={(v: any, name: any) => name === '유입비용' ? [`₩${Number(v??0).toLocaleString('ko-KR')}`, name] : [Number(v??0).toLocaleString('ko-KR'), name]} />
                       <Legend wrapperStyle={{ fontSize: 10, paddingTop: 6 }} />
                       <Bar yAxisId="bar" dataKey="카페24유입" stackId="s" fill="#3b82f6" radius={[0,0,0,0]} />
-                      <Bar yAxisId="bar" dataKey="네이버유입" stackId="s" fill="#10b981" radius={[2,2,0,0]} />
-                      <Line yAxisId="line" type="monotone" dataKey="유입비용" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3, fill: '#f43f5e' }} />
+                      <Bar yAxisId="bar" dataKey="네이버유입" stackId="s" fill="#10b981" radius={[2,2,0,0]}>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        <LabelList dataKey="inflow_total" position="top" style={{ fontSize: 8, fill: 'var(--text2)' }} formatter={(v: any) => v > 0 ? (v >= 1000 ? `${(v/1000).toFixed(1)}K` : String(v)) : ''} />
+                      </Bar>
+                      <Line yAxisId="line" type="monotone" dataKey="유입비용" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3, fill: '#f43f5e' }}>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        <LabelList dataKey="유입비용" position="top" style={{ fontSize: 8, fill: '#f43f5e' }} formatter={(v: any) => v > 0 ? (v >= 1000 ? `${(v/1000).toFixed(0)}K` : String(v)) : ''} />
+                      </Line>
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -830,8 +837,8 @@ export default function SalesPage() {
                   <div className="card-title">▦ 전환률 추이</div>
                 </div>
                 <div className="card-body" style={{ padding: '8px 10px' }}>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <LineChart data={convRateChartData} margin={{ top: 4, right: 8, bottom: 0, left: -8 }}>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <LineChart data={convRateChartData} margin={{ top: 20, right: 8, bottom: 0, left: -8 }}>
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false}
@@ -840,7 +847,10 @@ export default function SalesPage() {
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         formatter={(v: any) => [`${Number(v??0).toFixed(2)}%`, '전환률']} />
                       <Line type="monotone" dataKey="전환률(%)" stroke="#6366f1" strokeWidth={2}
-                        dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} />
+                        dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }}>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        <LabelList dataKey="전환률(%)" position="top" style={{ fontSize: 8, fill: '#6366f1' }} formatter={(v: any) => v > 0 ? `${Number(v).toFixed(1)}%` : ''} />
+                      </Line>
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -905,8 +915,8 @@ export default function SalesPage() {
                   <span style={{ fontSize: 10, color: 'var(--text3)' }}>회원가입 · 찜 · 카카오 · 인스타</span>
                 </div>
                 <div className="card-body" style={{ padding: '8px 10px' }}>
-                  <ResponsiveContainer width="100%" height={140}>
-                    <ComposedChart data={engagementChartData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
+                  <ResponsiveContainer width="100%" height={160}>
+                    <ComposedChart data={engagementChartData} margin={{ top: 20, right: 8, bottom: 0, left: 8 }}>
                       <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 9, fill: 'var(--text3)' }} axisLine={false} tickLine={false} />
@@ -917,7 +927,10 @@ export default function SalesPage() {
                       <Bar dataKey="회원가입" stackId="e" fill="#6366f1" />
                       <Bar dataKey="찜"      stackId="e" fill="#ec4899" />
                       <Bar dataKey="카카오"  stackId="e" fill="#f59e0b" />
-                      <Bar dataKey="인스타"  stackId="e" fill="#8b5cf6" radius={[2,2,0,0]} />
+                      <Bar dataKey="인스타"  stackId="e" fill="#8b5cf6" radius={[2,2,0,0]}>
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        <LabelList dataKey="eng_total" position="top" style={{ fontSize: 8, fill: 'var(--text2)' }} formatter={(v: any) => v > 0 ? String(v) : ''} />
+                      </Bar>
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
