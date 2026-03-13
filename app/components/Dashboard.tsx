@@ -171,7 +171,7 @@ function eventTimeStr(ev: GCalEventItem): string {
   return m === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}시 ${m}분`;
 }
 
-const CACHE_ID = '00000000-0000-0000-0000-000000000001';
+const CACHE_KEY = 'today-events';
 
 function TodayEventsCard() {
   const [events,       setEvents]       = useState<GCalEventItem[]>([]);
@@ -185,7 +185,7 @@ function TodayEventsCard() {
     const { data } = await supabase
       .from('calendar_cache')
       .select('events, cached_at')
-      .eq('id', CACHE_ID)
+      .eq('key', CACHE_KEY)
       .maybeSingle();
     if (!data) return false;
     const items = data.events as GCalEventItem[];
@@ -234,11 +234,10 @@ function TodayEventsCard() {
       setEvents(items);
 
       // 성공 시 캐시 저장
-      supabase.from('calendar_cache').upsert({
-        id: CACHE_ID,
-        events: items,
-        cached_at: new Date().toISOString(),
-      });
+      supabase.from('calendar_cache').upsert(
+        { key: CACHE_KEY, events: items, cached_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      );
     } catch {
       const cached = await loadFromCache();
       if (!cached) setError('네트워크 오류가 발생했어요.');
