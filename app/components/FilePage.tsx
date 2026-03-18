@@ -14,7 +14,8 @@ interface StorageFile {
   id: string | null;
   created_at: string | null;
   updated_at: string | null;
-  metadata: { size: number; mimetype: string } | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metadata: Record<string, any> | null;
 }
 
 const BUCKET = 'files';
