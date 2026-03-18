@@ -42,3 +42,23 @@ CREATE TABLE IF NOT EXISTS notices (
 
 ALTER TABLE notices ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all" ON notices FOR ALL USING (true) WITH CHECK (true);
+
+-- ──────────────────────────────────────────────────────────────
+-- file_folders: 파일함 폴더 메타데이터
+--   id         : UUID PK
+--   name       : 폴더 이름
+--   password   : 비밀번호 (null이면 잠금 없음)
+--   created_at : 생성 시각
+-- ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS file_folders (
+  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT        NOT NULL,
+  password   TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE file_folders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all" ON file_folders FOR ALL USING (true) WITH CHECK (true);
+
+-- Supabase Storage 버킷 "files" 는 대시보드에서 수동 생성 필요:
+-- Storage → New bucket → Name: "files" → Public: false

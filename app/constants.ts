@@ -72,6 +72,7 @@ export const TAB_TITLES: Record<string, string> = {
   personal:   'Schedule & 개인 노트',
   team:       'Team',
   memo:       'Memo',
+  files:      'File Storage',
 };
 
 export const TAB_SUBS: Record<string, string> = {
@@ -85,4 +86,5 @@ export const TAB_SUBS: Record<string, string> = {
   personal:   '구글 캘린더 · 날짜별 개인 메모',
   team:       '팀원 현황 및 업무 배분',
   memo:       '자유 메모장',
+  files:      '폴더별 파일 업로드 · 다운로드',
 };
