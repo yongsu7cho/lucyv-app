@@ -14,6 +14,7 @@ import MemoPage from './components/MemoPage';
 import OrderPage from './components/OrderPage';
 import MetaPage from './components/MetaPage';
 import SalesPage from './components/SalesPage';
+import FilePage from './components/FilePage';
 import { supabase } from '../lib/supabase';
 import type {
   TabName, Influencer, Project, CalendarEventMap, CalendarEvent,
@@ -348,6 +349,7 @@ export default function Home() {
               <SalesPage />
             </PasswordLock>
           )}
+          {activeTab === 'files' && <FilePage />}
         </div>
       </div>
     </div>

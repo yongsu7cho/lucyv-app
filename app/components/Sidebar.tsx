@@ -19,6 +19,7 @@ const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; 
   { tab: 'personal', icon: '◷', label: '일정/캘린더', section: 'Schedule & Team' },
   { tab: 'team', icon: '◎', label: '팀원 관리' },
   { tab: 'memo', icon: '✎', label: '메모장' },
+  { tab: 'files', icon: '🗂', label: '파일함' },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount }: SidebarProps) {
@@ -30,7 +31,7 @@ export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount 
   }
 
   return (
-    <>
+    <div className="sidebar-root">
       {/* Hamburger button (mobile only, via CSS) */}
       <button
         className="mob-hamburger"
@@ -80,6 +81,6 @@ export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount 
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
