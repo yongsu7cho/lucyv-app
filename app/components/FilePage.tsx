@@ -59,6 +59,8 @@ export default function FilePage() {
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderUsePw, setNewFolderUsePw] = useState(false);
   const [newFolderPw, setNewFolderPw] = useState('');
+  const [newFolderError, setNewFolderError] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   // Password modal
   const [pwFolder, setPwFolder] = useState<Folder | null>(null);
@@ -76,10 +78,11 @@ export default function FilePage() {
 
   async function loadFolders() {
     setLoadingFolders(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('file_folders')
       .select('*')
       .order('created_at');
+    if (error) console.error('[FilePage] loadFolders error:', error);
     setFolders(data ?? []);
     setLoadingFolders(false);
   }
@@ -125,16 +128,25 @@ export default function FilePage() {
   async function createFolder() {
     const name = newFolderName.trim();
     if (!name) return;
+    setCreatingFolder(true);
+    setNewFolderError(null);
     const { data, error } = await supabase
       .from('file_folders')
       .insert({ name, password: newFolderUsePw && newFolderPw ? newFolderPw : null })
       .select()
       .single();
-    if (!error && data) setFolders(prev => [...prev, data]);
+    setCreatingFolder(false);
+    if (error) {
+      console.error('[FilePage] createFolder error:', error);
+      setNewFolderError(error.message || '폴더 생성에 실패했습니다');
+      return;
+    }
+    if (data) setFolders(prev => [...prev, data]);
     setShowNewFolder(false);
     setNewFolderName('');
     setNewFolderPw('');
     setNewFolderUsePw(false);
+    setNewFolderError(null);
   }
 
   async function deleteFolder(folder: Folder) {
@@ -300,11 +312,11 @@ export default function FilePage() {
 
       {/* ── Modal: Create folder ── */}
       {showNewFolder && (
-        <div className="modal-overlay" onClick={() => setShowNewFolder(false)}>
+        <div className="modal-overlay" onClick={() => { setShowNewFolder(false); setNewFolderError(null); }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-head">
               <div className="modal-title">새 폴더 만들기</div>
-              <button className="modal-close" onClick={() => setShowNewFolder(false)}>✕</button>
+              <button className="modal-close" onClick={() => { setShowNewFolder(false); setNewFolderError(null); }}>✕</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
@@ -314,7 +326,7 @@ export default function FilePage() {
                   placeholder="폴더 이름"
                   value={newFolderName}
                   autoFocus
-                  onChange={e => setNewFolderName(e.target.value)}
+                  onChange={e => { setNewFolderName(e.target.value); setNewFolderError(null); }}
                   onKeyDown={e => { if (e.key === 'Enter') createFolder(); }}
                 />
               </div>
@@ -338,15 +350,20 @@ export default function FilePage() {
                   onChange={e => setNewFolderPw(e.target.value)}
                 />
               )}
+              {newFolderError && (
+                <div style={{ color: 'var(--danger)', fontSize: 12, padding: '6px 10px', background: 'rgba(217,48,37,.08)', borderRadius: 6 }}>
+                  ⚠️ {newFolderError}
+                </div>
+              )}
             </div>
             <div className="modal-foot">
-              <button className="btn" onClick={() => setShowNewFolder(false)}>취소</button>
+              <button className="btn" onClick={() => { setShowNewFolder(false); setNewFolderError(null); }}>취소</button>
               <button
                 className="btn btn-rose"
                 onClick={createFolder}
-                disabled={!newFolderName.trim()}
+                disabled={!newFolderName.trim() || creatingFolder}
               >
-                만들기
+                {creatingFolder ? '생성 중...' : '만들기'}
               </button>
             </div>
           </div>
