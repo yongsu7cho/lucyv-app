@@ -53,6 +53,7 @@ export default function FilePage() {
   const [loadingFolders, setLoadingFolders] = useState(true);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   // New folder modal
   const [showNewFolder, setShowNewFolder] = useState(false);
@@ -90,9 +91,11 @@ export default function FilePage() {
   const loadFiles = useCallback(async (folder: Folder) => {
     setLoadingFiles(true);
     setFiles([]);
-    const { data } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from(BUCKET)
       .list(folder.id, { sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) console.error('[FilePage] loadFiles error:', error);
+    console.log('[FilePage] loadFiles data:', data);
     setFiles((data ?? []).filter(f => f.name !== '.keep'));
     setLoadingFiles(false);
   }, []);
@@ -160,15 +163,25 @@ export default function FilePage() {
     if (selectedFolder?.id === folder.id) { setSelectedFolder(null); setFiles([]); }
   }
 
-  async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file || !selectedFolder) return;
+  // 여러 파일 업로드 (드래그앤드롭 + 버튼 공통)
+  async function uploadFiles(fileList: FileList | File[]) {
+    if (!selectedFolder) return;
     setUploading(true);
-    await supabase.storage
-      .from(BUCKET)
-      .upload(`${selectedFolder.id}/${file.name}`, file, { upsert: true });
+    const arr = Array.from(fileList);
+    for (const file of arr) {
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(`${selectedFolder.id}/${file.name}`, file, { upsert: true });
+      if (error) console.error('[FilePage] upload error:', error);
+    }
     await loadFiles(selectedFolder);
     setUploading(false);
+  }
+
+  async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const fl = e.target.files;
+    if (!fl || fl.length === 0) return;
+    await uploadFiles(fl);
     e.target.value = '';
   }
 
@@ -203,6 +216,24 @@ export default function FilePage() {
 
   const canPreview = (mime: string) =>
     mime.startsWith('image/') || mime === 'application/pdf';
+
+  // 드래그앤드롭 핸들러
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    if (selectedFolder) setDragOver(true);
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    // relatedTarget이 자식이면 무시
+    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+    setDragOver(false);
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (!selectedFolder) return;
+    const dropped = e.dataTransfer.files;
+    if (dropped && dropped.length > 0) uploadFiles(dropped);
+  }
 
   return (
     <div className="files-layout">
@@ -242,7 +273,17 @@ export default function FilePage() {
       </div>
 
       {/* ── Right: File list ── */}
-      <div className="files-main">
+      <div
+        className="files-main"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={dragOver ? {
+          background: 'rgba(232,160,168,0.10)',
+          outline: '2px dashed var(--rose)',
+          outlineOffset: '-4px',
+        } : {}}
+      >
         {!selectedFolder ? (
           <div className="files-placeholder">
             <div style={{ fontSize: 52, marginBottom: 12 }}>🗂️</div>
@@ -265,16 +306,43 @@ export default function FilePage() {
                 <input
                   ref={fileInputRef}
                   type="file"
+                  multiple
                   style={{ display: 'none' }}
                   onChange={uploadFile}
                 />
               </div>
             </div>
 
+            {/* 드래그 오버 안내 */}
+            {dragOver && (
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'column',
+                gap: 8,
+                pointerEvents: 'none',
+                zIndex: 10,
+              }}>
+                <div style={{ fontSize: 48 }}>📂</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--rose)' }}>
+                  여기에 파일을 놓으세요
+                </div>
+              </div>
+            )}
+
             {loadingFiles ? (
               <div className="files-empty">불러오는 중...</div>
             ) : files.length === 0 ? (
-              <div className="files-empty">파일이 없습니다. 파일을 업로드해주세요.</div>
+              <div className="files-empty" style={{ flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 36 }}>📭</div>
+                <div>파일이 없습니다</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                  파일을 여기에 드래그하거나 위 버튼으로 업로드하세요
+                </div>
+              </div>
             ) : (
               <div className="files-grid">
                 {files.map(file => {
