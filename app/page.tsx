@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
 import PasswordLock from './components/PasswordLock';
+import AuthGate from './components/AuthGate';
 import Dashboard from './components/Dashboard';
 import InfluencerPage from './components/InfluencerPage';
 import ProjectsPage from './components/ProjectsPage';
@@ -16,6 +17,7 @@ import MetaPage from './components/MetaPage';
 import SalesPage from './components/SalesPage';
 import FilePage from './components/FilePage';
 import { supabase } from '../lib/supabase';
+import type { Session } from '@supabase/supabase-js';
 import type {
   TabName, Influencer, Project, CalendarEventMap, CalendarEvent,
   Settlement, TeamMember, Memo,
@@ -155,6 +157,14 @@ async function syncCalendarEvents(oldMap: CalendarEventMap, newMap: CalendarEven
 
 // ── Main App ──
 export default function Home() {
+  return (
+    <AuthGate>
+      {(session) => <AppShell session={session} />}
+    </AuthGate>
+  );
+}
+
+function AppShell({ session }: { session: Session }) {
   const [activeTab, setActiveTab] = useState<TabName>('dashboard');
   const [mounted, setMounted] = useState(false);
   const [openInfluencerId, setOpenInfluencerId] = useState<number | null>(null);
@@ -292,6 +302,8 @@ export default function Home() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         activeInfluencerCount={activeInfCount}
+        userEmail={session.user.email ?? ''}
+        onLogout={() => supabase.auth.signOut()}
       />
       <div className="main">
         <Topbar activeTab={activeTab} />
