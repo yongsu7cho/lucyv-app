@@ -6,6 +6,8 @@ interface SidebarProps {
   activeTab: TabName;
   onTabChange: (tab: TabName) => void;
   activeInfluencerCount: number;
+  userEmail: string;
+  onLogout: () => void;
 }
 
 const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; badge?: boolean }[] = [
@@ -22,7 +24,7 @@ const NAV_ITEMS: { tab: TabName; icon: string; label: string; section?: string; 
   { tab: 'files', icon: '🗂', label: '파일함' },
 ];
 
-export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount, userEmail, onLogout }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   function handleTabChange(tab: TabName) {
@@ -73,10 +75,18 @@ export default function Sidebar({ activeTab, onTabChange, activeInfluencerCount 
         </nav>
         <div className="sidebar-bottom">
           <div className="user-row">
-            <div className="user-av">L</div>
-            <div>
-              <div className="user-name">대표님</div>
-              <div className="user-co">lucyvagency.com</div>
+            <div className="user-av">{(userEmail[0] ?? 'L').toUpperCase()}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={userEmail}>
+                {userEmail}
+              </div>
+              <div
+                className="user-co"
+                onClick={onLogout}
+                style={{ cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                로그아웃
+              </div>
             </div>
           </div>
         </div>
